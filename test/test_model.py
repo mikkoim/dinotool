@@ -81,3 +81,58 @@ def test_pca_module_nonflat():
     pca.fit(features)
     pca_features = pca.transform(features, flattened=False)
     assert pca_features.shape == (1, 16, 16, 3)
+
+
+def test_batch_handler():
+    from dinotool.model import load_dino_model, PCAModule, DinoFeatureExtractor
+    from dinotool.data import input_pipeline
+    from dinotool.utils import BatchHandler
+
+    model = load_dino_model("dinov2_vits14_reg")
+
+    input = input_pipeline(
+        "test/data/nasa.mp4", patch_size=model.patch_size, batch_size=1
+    )
+    batch = next(iter(input["data"]))
+
+    extractor = DinoFeatureExtractor(model, input_size=input["input_size"])
+    features = extractor(batch["img"])
+
+    pca = PCAModule(n_components=3, feature_map_size=input["feature_map_size"])
+    pca.fit(features)
+
+    batch_handler = BatchHandler(input["source"], extractor, pca)
+
+    batch_frames = batch_handler(batch)
+    assert batch_frames[0].img.size == (480, 270)
+    assert batch_frames[0].features.shape == torch.Size([19, 34, 384])
+    assert batch_frames[0].pca.shape == (19, 34, 3)
+
+
+def test_feature_saving():
+    from dinotool.model import load_dino_model, PCAModule, DinoFeatureExtractor
+    from dinotool.data import input_pipeline, create_xarray_from_batch_frames
+    from dinotool.utils import BatchHandler
+
+    model = load_dino_model("dinov2_vits14_reg")
+
+    input = input_pipeline(
+        "test/data/nasa.mp4", patch_size=model.patch_size, batch_size=2
+    )
+    batch = next(iter(input["data"]))
+
+    extractor = DinoFeatureExtractor(model, input_size=input["input_size"])
+    features = extractor(batch["img"])
+    pca = PCAModule(n_components=3, feature_map_size=input["feature_map_size"])
+    pca.fit(features)
+
+    batch_handler = BatchHandler(input["source"], extractor, pca)
+    i = 0
+    for batch in input["data"]:
+        batch_frames = batch_handler(batch)
+        f_data = create_xarray_from_batch_frames(batch_frames)
+        i += 1
+        if i == 2:
+            break
+    assert f_data.shape == (2, 19, 34, 384)
+    assert all(f_data.frame_idx.values == [2, 3])

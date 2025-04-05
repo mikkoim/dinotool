@@ -8,7 +8,9 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
+    "dask>=2025.3.0",
     "einops>=0.8.1",
+    "h5py>=3.13.0",
     "numpy>=2.2.4",
     "opencv-python>=4.11.0.86",
     "pillow>=11.1.0",
@@ -16,7 +18,9 @@ dependencies = [
     "torch>=2.6.0",
     "torchvision>=0.21.0",
     "tqdm>=4.67.1",
+    "xarray>=2025.3.1",
     "xformers>=0.0.29.post3",
+    "zarr>=3.0.6",
 ]
 
 [project.scripts]

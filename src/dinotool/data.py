@@ -3,11 +3,12 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
-from typing import Tuple, Dict
+from typing import Tuple, Dict, List
 import cv2
 from dataclasses import dataclass
 import numpy as np
 from torchvision import transforms
+import xarray as xr
 
 
 @dataclass
@@ -243,3 +244,23 @@ class VideoDataset(Dataset):
 
     def __len__(self):
         return len(self.video)
+
+
+def create_xarray_from_batch_frames(batch_frames: List[FrameData]) -> xr.DataArray:
+    tensor = torch.stack([x.features for x in batch_frames])
+    frame_idx = [x.frame_idx for x in batch_frames]
+    # Assuming the tensor has shape (height, width, feature)
+    batch, height, width, feature = tensor.shape
+
+    coords = {
+        "frame_idx": frame_idx,
+        "y": np.arange(height),
+        "x": np.arange(width),
+        "feature": np.arange(feature),
+    }
+    data = xr.DataArray(
+        tensor.cpu().numpy(),
+        dims=("frame_idx", "y", "x", "feature"),
+        coords=coords,
+    )
+    return data

@@ -5,8 +5,9 @@ from dinotool.utils import BatchHandler, frame_visualizer
 import os
 import uuid
 from tqdm import tqdm
-import warnings
 import subprocess
+from pathlib import Path
+import xarray as xr
 
 import argparse
 
@@ -49,6 +50,11 @@ def parse_args():
         action="store_true",
         help="Only visualize PCA features (default: False).",
     )
+    parser.add_argument(
+        "--save-features",
+        action="store_true",
+        help="Save features to a netcdf file using xarray (default: False).",
+    )
 
     args = parser.parse_args()
 
@@ -89,11 +95,11 @@ def main():
     pca.fit(features)
 
     if not is_video:
-        features = extractor(batch["img"])
+        features_flat = extractor(batch["img"])
         frame = data.FrameData(
             img=input["source"],
-            features=features,
-            pca=pca.transform(features, flattened=False)[0],
+            features=extractor.reshape_features(features_flat)[0],
+            pca=pca.transform(features_flat, flattened=False)[0],
             frame_idx=0,
             flattened=False,
         )
@@ -101,7 +107,14 @@ def main():
             frame, output_size=input["input_size"], only_pca=args.only_pca
         )
         out_img.save(args.output)
+
+        if args.save_features:
+            f_data = data.create_xarray_from_batch_frames([frame])
+            f_data.to_netcdf(args.output.replace(".jpg", ".nc"))
         return
+
+    if args.save_features:
+        feature_out_name = Path(args.output).with_suffix(".zarr")
 
     batch_handler = BatchHandler(input["source"], extractor, pca)
 
@@ -109,15 +122,36 @@ def main():
     os.mkdir(tmpdir)
     video = input["source"]
     progbar = tqdm(total=len(video))
-    for batch in input["data"]:
-        batch_frames = batch_handler(batch)
+    try:
+        for batch in input["data"]:
+            batch_frames = batch_handler(batch)
 
-        for frame in batch_frames:
-            out_img = frame_visualizer(
-                frame, output_size=input["input_size"], only_pca=args.only_pca
-            )
-            out_img.save(f"{tmpdir}/{frame.frame_idx:05d}.jpg")
-            progbar.update(1)
+            for frame in batch_frames:
+                out_img = frame_visualizer(
+                    frame, output_size=input["input_size"], only_pca=args.only_pca
+                )
+                out_img.save(f"{tmpdir}/{frame.frame_idx:05d}.jpg")
+                progbar.update(1)
+
+            if args.save_features:
+                f_data = data.create_xarray_from_batch_frames(batch_frames)
+                f_data.to_netcdf(f"{tmpdir}/{frame.frame_idx:05d}.nc")
+
+    except KeyboardInterrupt:
+        print("Keyboard interrupt detected. Cleaning up...")
+        progbar.close()
+
+    if args.save_features:
+        nc_files = sorted(Path(tmpdir).glob("*.nc"))
+        def process_one_path(path):
+            with xr.open_dataset(path) as ds:
+                ds.load()
+                return ds
+        xr_data = xr.concat([process_one_path(x) for x in nc_files], dim="frame_idx")
+        xr_data.to_zarr(
+            f"{feature_out_name}"
+        )
+        print(f"Saving features to {feature_out_name}")
 
     try:
         framerate = video.framerate
@@ -142,6 +176,10 @@ def main():
         ]
     )
     subprocess.run(["rm", "-r", f"{tmpdir}"])
+
+    print(f"Saved visualization to {args.output}")
+    if args.save_features:
+        print(f"Saved features to {feature_out_name}")
 
 
 if __name__ == "__main__":
