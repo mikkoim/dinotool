@@ -9,6 +9,8 @@ from dataclasses import dataclass
 import numpy as np
 from torchvision import transforms
 import xarray as xr
+from einops import rearrange
+import pandas as pd
 
 
 @dataclass
@@ -264,3 +266,32 @@ def create_xarray_from_batch_frames(batch_frames: List[FrameData]) -> xr.DataArr
         coords=coords,
     )
     return data
+
+
+def create_dataframe_from_batch_frames(batch_frames):
+    """
+    Create a DataFrame from batch frames.
+    """
+    # Assuming batch_frames is a list of objects with 'features' and 'frame_idx' attributes
+    # Convert features to a 2D array
+    tensor = torch.stack([x.features for x in batch_frames])
+    frame_idx_set = [x.frame_idx for x in batch_frames]
+
+    n_patches = tensor.shape[1] * tensor.shape[2]
+
+    features = rearrange(tensor, "b h w f -> (b h w) f").cpu().numpy()
+
+    frame_idx = []
+    patch_idx = []
+    for idx in frame_idx_set:
+        frame_idx.extend([int(idx)] * n_patches)
+        patch_idx.extend(list(range(n_patches)))
+
+    # patch_idx
+    index = pd.MultiIndex.from_tuples(
+        list(zip(frame_idx, patch_idx)), names=["frame_idx", "patch_idx"]
+    )
+
+    columns = [f"feature_{i}" for i in range(features.shape[1])]
+    df = pd.DataFrame(features, index=index, columns=columns)
+    return df

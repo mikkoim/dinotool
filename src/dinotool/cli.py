@@ -8,6 +8,9 @@ from tqdm import tqdm
 import subprocess
 from pathlib import Path
 import xarray as xr
+from dataclasses import dataclass
+from typing import Tuple, Dict, List
+import shutil
 
 import argparse
 
@@ -52,8 +55,10 @@ def parse_args():
     )
     parser.add_argument(
         "--save-features",
-        action="store_true",
-        help="Save features to a netcdf file using xarray (default: False).",
+        type=str,
+        default=None,
+        choices=["full", "flat"],
+        help="Saves features to a netCDF file for images, and a zarr directory for videos (default: False).",
     )
 
     args = parser.parse_args()
@@ -64,12 +69,62 @@ def parse_args():
     if os.path.exists(args.output):
         parser.error(f"Output path '{args.output}' already exists.")
 
-    return args
+    return DinotoolConfig(
+        input=args.input,
+        output=args.output,
+        model_name=args.model_name,
+        input_size=tuple(args.input_size) if args.input_size else None,
+        batch_size=args.batch_size,
+        only_pca=args.only_pca,
+        save_features=args.save_features,
+    )
 
 
-def main():
-    args = parse_args()
+@dataclass
+class DinotoolConfig:
+    input: str
+    output: str
+    model_name: str = "dinov2_vits14_reg"
+    input_size: Tuple[int, int] = None
+    batch_size: int = 1
+    only_pca: bool = False
+    save_features: str = None
+
+
+def save_batch_features(batch_frames, method, output):
+    if method == "full":
+        f_data = data.create_xarray_from_batch_frames(batch_frames)
+        f_data.to_netcdf(f"{output}.nc")
+    elif method == "flat":
+        f_data = data.create_dataframe_from_batch_frames(batch_frames)
+        f_data.to_parquet(f"{output}.parquet")
+
+
+def combine_frame_features(method, tmpdir, feature_out_name):
+    if method == "full":
+        nc_files = sorted(Path(tmpdir).glob("*.nc"))
+
+        def process_one_path(path):
+            with xr.open_dataset(path) as ds:
+                ds.load()
+                return ds
+
+        xr_data = xr.concat([process_one_path(x) for x in nc_files], dim="frame_idx")
+        xr_data.to_zarr(f"{feature_out_name}")
+        print(f"Saving features to {feature_out_name}")
+    elif method == "flat":
+        Path(feature_out_name).mkdir(parents=True, exist_ok=True)
+        parquet_files = sorted(Path(tmpdir).glob("*.parquet"))
+        idx = 0
+        for file in parquet_files:
+            shutil.move(file, f"{feature_out_name}/part.{idx}.parquet")
+            idx += 1
+        print(f"Saved features to {feature_out_name}")
+
+
+def main(args: DinotoolConfig):
     model = load_dino_model(args.model_name)
+    print(f"Using model: {args.model_name}")
 
     input = data.input_pipeline(
         args.input,
@@ -77,29 +132,28 @@ def main():
         batch_size=args.batch_size,
         resize_size=args.input_size,
     )
+    print(f"Input size: {input['input_size']}")
+    print(f"Feature map size: {input['feature_map_size']}")
 
     is_video = True
     if isinstance(input["data"], torch.Tensor):
         is_video = False
-
-    extractor = DinoFeatureExtractor(model, input_size=input["input_size"])
-
-    if is_video:
-        batch = next(iter(input["data"]))
-    else:
         batch = {}
         batch["img"] = input["data"]
+    else:
+        batch = next(iter(input["data"]))
 
+    extractor = DinoFeatureExtractor(model, input_size=input["input_size"])
     pca = PCAModule(n_components=3, feature_map_size=input["feature_map_size"])
     features = extractor(batch["img"])
     pca.fit(features)
 
+    # Image input handling
     if not is_video:
-        features_flat = extractor(batch["img"])
         frame = data.FrameData(
             img=input["source"],
-            features=extractor.reshape_features(features_flat)[0],
-            pca=pca.transform(features_flat, flattened=False)[0],
+            features=extractor.reshape_features(features)[0],
+            pca=pca.transform(features, flattened=False)[0],
             frame_idx=0,
             flattened=False,
         )
@@ -109,16 +163,23 @@ def main():
         out_img.save(args.output)
 
         if args.save_features:
-            f_data = data.create_xarray_from_batch_frames([frame])
-            f_data.to_netcdf(args.output.replace(".jpg", ".nc"))
+            save_batch_features(
+                [frame],
+                method=args.save_features,
+                output=f"{Path(args.output).with_suffix('')}",
+            )
         return
 
+    # Video input handling
     if args.save_features:
-        feature_out_name = Path(args.output).with_suffix(".zarr")
+        if args.save_features == "full":
+            feature_out_name = Path(args.output).with_suffix(".zarr")
+        else:
+            feature_out_name = Path(args.output).with_suffix(".parquet")
 
     batch_handler = BatchHandler(input["source"], extractor, pca)
 
-    tmpdir = f"temp_frames-{str(uuid.uuid4())}"
+    tmpdir = f"temp_dinotool_frames-{str(uuid.uuid4())}"
     os.mkdir(tmpdir)
     video = input["source"]
     progbar = tqdm(total=len(video))
@@ -134,25 +195,22 @@ def main():
                 progbar.update(1)
 
             if args.save_features:
-                f_data = data.create_xarray_from_batch_frames(batch_frames)
-                f_data.to_netcdf(f"{tmpdir}/{frame.frame_idx:05d}.nc")
+                save_batch_features(
+                    batch_frames,
+                    method=args.save_features,
+                    output=f"{tmpdir}/{batch_frames[0].frame_idx:05d}",
+                )
 
     except KeyboardInterrupt:
         print("Keyboard interrupt detected. Cleaning up...")
         progbar.close()
 
     if args.save_features:
-        nc_files = sorted(Path(tmpdir).glob("*.nc"))
-        def process_one_path(path):
-            with xr.open_dataset(path) as ds:
-                ds.load()
-                return ds
-        xr_data = xr.concat([process_one_path(x) for x in nc_files], dim="frame_idx")
-        xr_data.to_zarr(
-            f"{feature_out_name}"
+        combine_frame_features(
+            method=args.save_features, tmpdir=tmpdir, feature_out_name=feature_out_name
         )
-        print(f"Saving features to {feature_out_name}")
 
+    # Combine frames into a video using ffmpeg
     try:
         framerate = video.framerate
     except ValueError:
@@ -175,6 +233,8 @@ def main():
             args.output,
         ]
     )
+
+    # Clean up temporary files
     subprocess.run(["rm", "-r", f"{tmpdir}"])
 
     print(f"Saved visualization to {args.output}")
@@ -182,5 +242,11 @@ def main():
         print(f"Saved features to {feature_out_name}")
 
 
+def cli():
+    args = parse_args()
+    main(args)
+
+
 if __name__ == "__main__":
-    main()
+    args = parse_args()
+    main(args)
