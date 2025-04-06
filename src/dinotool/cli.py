@@ -57,7 +57,7 @@ def parse_args():
         "--save-features",
         type=str,
         default=None,
-        choices=["full", "flat"],
+        choices=["full", "flat", "frame"],
         help="Saves features to a netCDF file for images, and a zarr directory for videos (default: False).",
     )
 
@@ -121,6 +121,44 @@ def combine_frame_features(method, tmpdir, feature_out_name):
             idx += 1
         print(f"Saved features to {feature_out_name}")
 
+def handle_frame_level_features(input, extractor, output):
+    import pandas as pd
+    import numpy as np
+
+    if isinstance(input, torch.Tensor):
+        features = extractor(input, return_clstoken=True).cpu().numpy()
+        np.savetxt(f"{output}.txt", features, delimiter=",")
+        print(f"Saved features to {output}.txt")
+        return
+
+    print("Extracting frame-level features. This does not produce a video output.")
+    tmpdir = f"temp_dinotool_frames-{str(uuid.uuid4())}"
+    os.mkdir(tmpdir)
+
+    try:
+        progbar = tqdm(total=len(input))
+        idx = 0
+        for batch in input:
+            features = extractor(batch["img"], return_clstoken=True).cpu().numpy()
+            frame_idx = batch["frame_idx"].cpu().numpy()
+
+            columns = [f"feature_{i}" for i in range(features.shape[1])]
+            df = pd.DataFrame(features, index=frame_idx, columns=columns)
+            df.to_parquet(f"{tmpdir}/{idx:05d}.parquet")
+            progbar.update(1)
+            idx += 1
+    except KeyboardInterrupt:
+        print("Keyboard interrupt detected. Cleaning up...")
+        progbar.close()
+    
+    # collect all parquet files
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    parquet_files = sorted(Path(tmpdir).glob("*.parquet"))
+    pd.concat(
+        [pd.read_parquet(x) for x in parquet_files], axis=0
+    ).to_parquet(f"{output}.parquet")
+    print(f"Saved features to {output}.parquet")
+
 
 def main(args: DinotoolConfig):
     model = load_dino_model(args.model_name)
@@ -144,6 +182,13 @@ def main(args: DinotoolConfig):
         batch = next(iter(input["data"]))
 
     extractor = DinoFeatureExtractor(model, input_size=input["input_size"])
+
+    if args.save_features == 'frame':
+        handle_frame_level_features(input["data"],
+                                    extractor=extractor,
+                                    output=f"{Path(args.output).with_suffix('')}")
+        return
+
     pca = PCAModule(n_components=3, feature_map_size=input["feature_map_size"])
     features = extractor(batch["img"])
     pca.fit(features)

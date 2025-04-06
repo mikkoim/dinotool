@@ -53,7 +53,13 @@ class DinoFeatureExtractor(nn.Module):
             self.w_featmap = dino_dims["w_featmap"]
             self.h_featmap = dino_dims["h_featmap"]
 
-    def forward(self, batch: torch.Tensor, flattened=True, normalized=True):
+    def forward(self, batch: torch.Tensor, flattened=True, normalized=True, return_clstoken=False):
+        if return_clstoken:
+            with torch.no_grad():
+                batch = batch.to(self.device)
+                features = self.model.forward(batch)
+                return features
+
         b, c, h, w = batch.shape
         with torch.no_grad():
             batch = batch.to(self.device)
