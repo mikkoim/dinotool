@@ -5,8 +5,8 @@ from dinotool import data
 
 def test_video_dir():
     video = VideoDir("test/data/nasa_frames")
-    assert len(video) == 390
-    assert repr(video) == "VideoDir(path=test/data/nasa_frames, frame_count=390)"
+    assert len(video) == 90
+    assert repr(video) == "VideoDir(path=test/data/nasa_frames, frame_count=90)"
     assert video[0] is not None
     assert video[0].size == (480, 270)
     assert video.resolution == (480, 270)
@@ -16,8 +16,8 @@ def test_video_dir():
 
 def test_video_file():
     video = VideoFile("test/data/nasa.mp4")
-    assert len(video) == 390
-    assert repr(video) == "VideoFile(path=test/data/nasa.mp4, frame_count=390)"
+    assert len(video) == 90
+    assert repr(video) == "VideoFile(path=test/data/nasa.mp4, frame_count=90)"
     assert video[0] is not None
     assert video[0].size == (480, 270)
     assert video.resolution == (480, 270)
@@ -27,8 +27,8 @@ def test_video_file():
 
 def test_video():
     video = Video("test/data/nasa.mp4")
-    assert len(video) == 390
-    assert repr(video) == "Video(path=test/data/nasa.mp4, frame_count=390)"
+    assert len(video) == 90
+    assert repr(video) == "Video(path=test/data/nasa.mp4, frame_count=90)"
     assert video[0] is not None
     assert video[0].size == (480, 270)
     assert video.resolution == (480, 270)
@@ -36,8 +36,8 @@ def test_video():
         _ = video[1000]
 
     video = Video("test/data/nasa.mp4")
-    assert len(video) == 390
-    assert repr(video) == "Video(path=test/data/nasa.mp4, frame_count=390)"
+    assert len(video) == 90
+    assert repr(video) == "Video(path=test/data/nasa.mp4, frame_count=90)"
     assert video[0] is not None
     assert video[0].size == (480, 270)
     assert video.resolution == (480, 270)
@@ -78,7 +78,7 @@ def test_calculate_dino_dimensions():
 def test_video_dataset_no_transform():
     video = Video("test/data/nasa.mp4")
     ds = VideoDataset(video)
-    assert len(ds) == 390
+    assert len(ds) == 90
     assert ds[0]["img"] is not None
     assert ds[0]["img"].size == (480, 270)
     assert ds[0]["frame_idx"] == 0
@@ -97,7 +97,7 @@ def test_video_dataset_simple_transform():
         ]
     )
     ds = VideoDataset(video, transform=transform)
-    assert len(ds) == 390
+    assert len(ds) == 90
     assert ds[0]["img"] is not None
     assert ds[0]["img"].shape == torch.Size([3, 224, 224])
     assert ds[0]["frame_idx"] == 0
@@ -117,7 +117,7 @@ def test_video_dataset_dataloader():
     )
     ds = VideoDataset(video, transform=transform)
     dataloader = DataLoader(ds, batch_size=8, shuffle=False)
-    assert len(dataloader) == 49
+    assert len(dataloader) == 12
     batch = next(iter(dataloader))
     assert batch["img"].shape == torch.Size([8, 3, 224, 224])
     assert batch["frame_idx"].shape == torch.Size([8])
