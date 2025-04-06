@@ -157,6 +157,9 @@ def handle_frame_level_features(input, extractor, output):
     pd.concat(
         [pd.read_parquet(x) for x in parquet_files], axis=0
     ).to_parquet(f"{output}.parquet")
+
+    # Clean up temporary files
+    subprocess.run(["rm", "-r", f"{tmpdir}"])
     print(f"Saved features to {output}.parquet")
 
 
