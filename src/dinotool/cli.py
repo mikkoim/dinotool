@@ -184,7 +184,9 @@ def main(args: DinotoolConfig):
     else:
         batch = next(iter(input["data"]))
 
-    extractor = DinoFeatureExtractor(model, input_size=input["input_size"])
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    print(f"Using device: {device}")
+    extractor = DinoFeatureExtractor(model, input_size=input["input_size"], device=device)
 
     if args.save_features == 'frame':
         handle_frame_level_features(input["data"],
