@@ -211,6 +211,7 @@ def main(args: DinotoolConfig):
             frame, output_size=input["input_size"], only_pca=args.only_pca
         )
         out_img.save(args.output)
+        print(f"Saved visualization to {Path(args.output)}")
 
         if args.save_features:
             save_batch_features(
@@ -218,6 +219,11 @@ def main(args: DinotoolConfig):
                 method=args.save_features,
                 output=f"{Path(args.output).with_suffix('')}",
             )
+            if args.save_features == "full":
+                out_name = Path(args.output).with_suffix(".nc")
+            else:
+                out_name = Path(args.output).with_suffix(".parquet")
+            print(f"Saved features to {out_name}")
         return
 
     # Video input handling

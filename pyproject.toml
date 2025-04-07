@@ -20,7 +20,7 @@ dependencies = [
     "torchvision>=0.21.0",
     "tqdm>=4.67.1",
     "xarray>=2025.3.1",
-    "xformers>=0.0.29.post3",
+    "xformers>=0.0.29.post3 ; sys_platform == 'linux'",
     "zarr>=3.0.6",
 ]
 
