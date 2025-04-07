@@ -37,6 +37,8 @@ dinotool test.jpg -o out.jpg
 ### 🐍 Conda Environment (Recommended)
 If you want an isolated setup, especially useful for managing `ffmpeg` and dependencies:
 
+Install [Miniforge](https://conda-forge.org/download/).
+
 ```bash
 conda create -n dinotool python=3.12
 conda activate dinotool
