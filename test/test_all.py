@@ -46,6 +46,20 @@ def test_full_image_features_flat():
     df = pd.read_parquet("test/outputs/out.parquet")
     assert df.shape == (910, 384)
 
+def test_full_image_features_frame():
+    args = DinotoolConfig(
+        input="test/data/magpie.jpg",
+        output="test/outputs/out",
+        save_features="frame",
+    )
+
+    main(args)
+    assert os.path.exists("test/outputs/out.txt")
+    import pandas as pd
+
+    df = pd.read_csv("test/outputs/out.txt", header=None)
+    assert df.shape == (1, 384)
+
 
 def test_full_video_file():
     args = DinotoolConfig(
@@ -117,11 +131,23 @@ def test_full_video_file_features_flat():
     assert os.path.exists("test/outputs/nasaout5.parquet")
     df = dd.read_parquet("test/outputs/nasaout5.parquet")
 
+def test_full_video_file_features_frame():
+    args = DinotoolConfig(
+        input="test/data/nasa.mp4",
+        output="test/outputs/nasaout6.mp4",
+        batch_size=4,
+        save_features="frame",
+    )
+
+    main(args)
+    import pandas as pd
+    df = pd.read_parquet("test/outputs/nasaout6.parquet")
+    assert df.shape == (90, 384)
 
 def test_full_video_folder_features_flat():
     args = DinotoolConfig(
         input="test/data/nasa_frames",
-        output="test/outputs/nasaout6.mp4",
+        output="test/outputs/nasaout7.mp4",
         batch_size=4,
         save_features="flat",
     )
@@ -129,5 +155,5 @@ def test_full_video_folder_features_flat():
     main(args)
     import dask.dataframe as dd
 
-    assert os.path.exists("test/outputs/nasaout6.parquet")
-    df = dd.read_parquet("test/outputs/nasaout6.parquet")
+    assert os.path.exists("test/outputs/nasaout7.parquet")
+    df = dd.read_parquet("test/outputs/nasaout7.parquet")
