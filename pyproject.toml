@@ -1,10 +1,23 @@
 [project]
 name = "dinotool"
 version = "0.1.0"
-description = "Add your description here"
+description = "Command-line tool for extracting DINO features for images and videos "
 readme = "README.md"
 authors = [
     { name = "Mikko Impiö", email = "mikko.impio@gmail.com" }
+]
+license = {text = "Apache License (2.0)"}
+keywords = [
+    "dino",
+    "feature extraction",
+    "image processing",
+    "video processing",
+    "machine learning",
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License"    ,
+    "Operating System :: OS Independent",
 ]
 requires-python = ">=3.12"
 dependencies = [
@@ -23,6 +36,10 @@ dependencies = [
     "xformers>=0.0.29.post3 ; sys_platform == 'linux'",
     "zarr>=3.0.6",
 ]
+
+[project.urls]
+Homepage = "https://github.com/mikkoim/dinotool"
+Issues = "https://github.com/mikkoim/dinotool/issues"
 
 [project.scripts]
 dinotool = "dinotool.cli:cli"
