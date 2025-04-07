@@ -14,7 +14,7 @@
 - Saves features for downstream tasks
 - ⚡ Command-line interface for easy, no-code operation
 
-[Video example](https://github.com/mikkoim/dinotool/raw/refs/heads/main/docs/resources/sintel_out.mp4)
+[Video example](https://github.com/user-attachments/assets/0cc2e7ed-15b5-4f38-97f4-afee9b62e445)
 
 ## 📦 Installation
 
