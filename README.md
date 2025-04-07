@@ -1,3 +1,6 @@
+![PyPI](https://img.shields.io/pypi/v/dinotool)
+![License](https://img.shields.io/github/license/mikkoim/dinotool)
+
 # 🦕 DINOtool
 
 **DINOtool** is a simple Python package that makes it easy to extract and visualize features from images and videos using [DINOv2](https://dinov2.metademolab.com/) models.
@@ -11,10 +14,18 @@
   - Folders containing image sequences
 - 🌈 Automatically generates PCA visualizations of the features
 - 🧠 Visuals include side-by-side view of the original frame and the feature map
-- Saves features for downstream tasks
+- 💾 Saves features for downstream tasks
 - ⚡ Command-line interface for easy, no-code operation
 
+Example:
+```bash
+dinotool input.mp4 -o output.mp4
+```
+produces output:
+
 [Video example](https://github.com/user-attachments/assets/0cc2e7ed-15b5-4f38-97f4-afee9b62e445)
+
+DINOtool also lets you save the raw features for downstream tasks.
 
 ## 📦 Installation
 
