@@ -10,11 +10,14 @@ from dinotool.data import calculate_dino_dimensions
 
 
 def load_model(model_name: str = "dinov2_vits14_reg") -> nn.Module:
-    """Load a DINO model from the facebookresearch/dinov2 repository.
+    """Load a model for DINO or OpenCLIP.
+    This function loads a DINO or OpenCLIP model based on the provided model name.
+    If the model name starts with "hf-hub:timm", it is assumed to be an OpenCLIP model.
+    Otherwise, it is assumed to be a DINO model.
     Args:
-        model_name (str): name of the DINO model to load.
+        model_name (str): name of the model to load.
     Returns:
-        nn.Module: DINO model.
+        nn.Module: Model.
     """
     if model_name.startswith("hf-hub:timm"):
         from open_clip import create_model_from_pretrained
@@ -60,6 +63,18 @@ class OpenCLIPFeatureExtractor(nn.Module):
             )
             self.w_featmap = dino_dims["w_featmap"]
             self.h_featmap = dino_dims["h_featmap"]
+
+    def set_input_size(self, input_size: Tuple[int, int]):
+        """Set the input size for the feature extractor.
+        Args:
+            input_size (Tuple[int, int]): input size (width, height).
+        """
+        self.input_size = input_size
+        dino_dims = calculate_dino_dimensions(
+            input_size, patch_size=self.patch_size
+        )
+        self.w_featmap = dino_dims["w_featmap"]
+        self.h_featmap = dino_dims["h_featmap"]
 
     def forward(self, batch: torch.Tensor, flattened=True, normalized=True, return_clstoken=False):
         if return_clstoken:
@@ -123,6 +138,18 @@ class DinoFeatureExtractor(nn.Module):
             self.w_featmap = dino_dims["w_featmap"]
             self.h_featmap = dino_dims["h_featmap"]
 
+    def set_input_size(self, input_size: Tuple[int, int]):
+        """Set the input size for the feature extractor.
+        Args:
+            input_size (Tuple[int, int]): input size (width, height).
+        """
+        self.input_size = input_size
+        dino_dims = calculate_dino_dimensions(
+            input_size, patch_size=self.patch_size
+        )
+        self.w_featmap = dino_dims["w_featmap"]
+        self.h_featmap = dino_dims["h_featmap"]
+
     def forward(self, batch: torch.Tensor, flattened=True, normalized=True, return_clstoken=False):
         if return_clstoken:
             with torch.no_grad():
@@ -176,13 +203,14 @@ class PCAModule:
             features = features.cpu()
         return features
 
-    def fit(self, features: torch.Tensor):
+    def fit(self, features: torch.Tensor, verbose: bool = True):
         features = self.__check_features(features)
         b, hw, f = features.shape
         self.pca.fit(features.reshape(b * hw, f))
-        print(f"Fitted PCA with {self.pca.n_components_} components")
-        if self.n_components < 8:
-            print(f"Explained variance ratio: {self.pca.explained_variance_ratio_}")
+        if verbose:
+            print(f"Fitted PCA with {self.pca.n_components_} components")
+            if self.n_components < 8:
+                print(f"Explained variance ratio: {self.pca.explained_variance_ratio_}")
 
     def transform(self, features, flattened=True, normalized=True):
         features = self.__check_features(features)

@@ -6,11 +6,13 @@ import numpy as np
 
 class BatchHandler:
     def __init__(
-        self, video: Video, feature_extractor: DinoFeatureExtractor, pca: PCAModule
+        self, video: Video, feature_extractor: DinoFeatureExtractor, pca: PCAModule,
+        progress_bar=None
     ):
         self.video = video
         self.feature_extractor = feature_extractor
         self.pca = pca
+        self.progress_bar = progress_bar
 
     def __call__(self, batch):
         features = self.feature_extractor(batch["img"])
@@ -32,6 +34,8 @@ class BatchHandler:
             )
 
             framedata_list.append(framedata)
+            if self.progress_bar is not None:
+                self.progress_bar.update(1)
         return framedata_list
 
 

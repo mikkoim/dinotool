@@ -1,0 +1,4 @@
+
+```bash
+uv run dinotool 
+```

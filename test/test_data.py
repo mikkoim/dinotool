@@ -35,15 +35,6 @@ def test_video():
     with pytest.raises(IndexError):
         _ = video[1000]
 
-    video = Video("test/data/nasa.mp4")
-    assert len(video) == 90
-    assert repr(video) == "Video(path=test/data/nasa.mp4, frame_count=90)"
-    assert video[0] is not None
-    assert video[0].size == (480, 270)
-    assert video.resolution == (480, 270)
-    with pytest.raises(IndexError):
-        _ = video[1000]
-
 
 def test_calculate_dino_dimensions():
     size = (640, 480)
@@ -124,29 +115,29 @@ def test_video_dataset_dataloader():
     assert batch["frame_idx"][0] == 0
 
 
-def test_input_pipeline_video_dir():
+def test_input_processor_video_dir():
     from torch.utils.data import DataLoader
 
-    input = data.input_pipeline("dinov2_vits14_reg", "test/data/nasa_frames", patch_size=16, batch_size=2)
+    input = data.InputProcessor("dinov2_vits14_reg", "test/data/nasa_frames", patch_size=16, batch_size=2).process()
     assert isinstance(input["data"], DataLoader)
     assert input["input_size"] == (480, 256)
     assert input["feature_map_size"] == (30, 16)
 
 
-def test_input_pipeline_video_file():
+def test_input_processor_video_file():
     from torch.utils.data import DataLoader
 
-    input = data.input_pipeline("dinov2_vits14_reg", "test/data/nasa.mp4", patch_size=16, batch_size=2)
+    input = data.InputProcessor("dinov2_vits14_reg", "test/data/nasa.mp4", patch_size=16, batch_size=2).process()
     assert isinstance(input["data"], DataLoader)
     assert input["input_size"] == (480, 256)
     assert input["feature_map_size"] == (30, 16)
 
 
-def test_input_pipeline_image_file():
+def test_input_processor_image_file():
     from torch.utils.data import DataLoader
     import torch
 
-    input = data.input_pipeline("dinov2_vits14_reg", "test/data/magpie.jpg", patch_size=16, batch_size=2)
+    input = data.InputProcessor("dinov2_vits14_reg", "test/data/magpie.jpg", patch_size=16, batch_size=2).process()
     assert isinstance(input["data"], torch.Tensor)
     assert input["input_size"] == (496, 368)
     assert input["feature_map_size"] == (31, 23)

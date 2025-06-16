@@ -1,4 +1,4 @@
-from dinotool.cli import main, DinotoolConfig
+from dinotool.cli import DinotoolConfig, DinotoolProcessor
 from pathlib import Path
 import os
 
@@ -6,20 +6,20 @@ Path("test/outputs").mkdir(exist_ok=True)
 
 
 def test_full_image():
-    args = DinotoolConfig(input="test/data/magpie.jpg", output="test/outputs/out.jpg")
-
-    main(args)
+    config = DinotoolConfig(input="test/data/magpie.jpg", output="test/outputs/out.jpg")
+    processor = DinotoolProcessor(config)
+    processor.run()
     assert os.path.exists("test/outputs/out.jpg")
 
 
 def test_full_image_features():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/magpie.jpg",
         output="test/outputs/out.jpg",
         save_features="full",
     )
-
-    main(args)
+    processor = DinotoolProcessor(config)
+    processor.run()
     assert os.path.exists("test/outputs/out.jpg")
     assert os.path.exists("test/outputs/out.nc")
     import xarray as xr
@@ -31,14 +31,14 @@ def test_full_image_features():
     assert len(ds.feature) == 384
 
 def test_full_image_features_siglip2():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         model_name="hf-hub:timm/ViT-B-16-SigLIP2-512",
         input="test/data/magpie.jpg",
         output="test/outputs/out-siglip2.jpg",
         save_features="full",
     )
-
-    main(args)
+    processor = DinotoolProcessor(config)
+    processor.run()
     assert os.path.exists("test/outputs/out-siglip2.jpg")
     assert os.path.exists("test/outputs/out-siglip2.nc")
     import xarray as xr
@@ -51,13 +51,13 @@ def test_full_image_features_siglip2():
 
 
 def test_full_image_features_flat():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/magpie.jpg",
         output="test/outputs/out.jpg",
         save_features="flat",
     )
-
-    main(args)
+    processor = DinotoolProcessor(config)
+    processor.run()
     assert os.path.exists("test/outputs/out.jpg")
     assert os.path.exists("test/outputs/out.parquet")
     import pandas as pd
@@ -67,13 +67,14 @@ def test_full_image_features_flat():
 
 
 def test_full_image_features_frame():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/magpie.jpg",
         output="test/outputs/out",
         save_features="frame",
     )
+    processor = DinotoolProcessor(config)
+    processor.run()
 
-    main(args)
     assert os.path.exists("test/outputs/out.txt")
     import pandas as pd
 
@@ -82,32 +83,35 @@ def test_full_image_features_frame():
 
 
 def test_full_video_file():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/nasa.mp4", output="test/outputs/nasaout1.mp4", batch_size=4
     )
 
-    main(args)
+    processor = DinotoolProcessor(config)
+    processor.run()
     assert os.path.exists("test/outputs/nasaout1.mp4")
 
 
 def test_full_video_folder():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/nasa_frames", output="test/outputs/nasaout2.mp4", batch_size=4
     )
 
-    main(args)
+    processor = DinotoolProcessor(config)
+    processor.run()
     assert os.path.exists("test/outputs/nasaout2.mp4")
 
 
 def test_full_video_file_features():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/nasa.mp4",
         output="test/outputs/nasaout3.mp4",
         batch_size=4,
         save_features="full",
     )
+    processor = DinotoolProcessor(config)
+    processor.run()
 
-    main(args)
     import xarray as xr
 
     assert os.path.exists("test/outputs/nasaout3.zarr")
@@ -119,14 +123,15 @@ def test_full_video_file_features():
 
 
 def test_full_video_folder_features():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/nasa_frames",
         output="test/outputs/nasaout4.mp4",
         batch_size=4,
         save_features="full",
     )
 
-    main(args)
+    processor = DinotoolProcessor(config)
+    processor.run()
     import xarray as xr
 
     assert os.path.exists("test/outputs/nasaout4.zarr")
@@ -138,14 +143,15 @@ def test_full_video_folder_features():
 
 
 def test_full_video_file_features_flat():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/nasa.mp4",
         output="test/outputs/nasaout5.mp4",
         batch_size=4,
         save_features="flat",
     )
+    processor = DinotoolProcessor(config)
+    processor.run()
 
-    main(args)
     import dask.dataframe as dd
 
     assert os.path.exists("test/outputs/nasaout5.parquet")
@@ -153,14 +159,15 @@ def test_full_video_file_features_flat():
 
 
 def test_full_video_file_features_frame():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/nasa.mp4",
         output="test/outputs/nasaout6.mp4",
         batch_size=4,
         save_features="frame",
     )
+    processor = DinotoolProcessor(config)
+    processor.run()
 
-    main(args)
     import pandas as pd
 
     df = pd.read_parquet("test/outputs/nasaout6.parquet")
@@ -168,14 +175,15 @@ def test_full_video_file_features_frame():
 
 
 def test_full_video_folder_features_flat():
-    args = DinotoolConfig(
+    config = DinotoolConfig(
         input="test/data/nasa_frames",
         output="test/outputs/nasaout7.mp4",
         batch_size=4,
         save_features="flat",
     )
+    processor = DinotoolProcessor(config)
+    processor.run()
 
-    main(args)
     import dask.dataframe as dd
 
     assert os.path.exists("test/outputs/nasaout7.parquet")
