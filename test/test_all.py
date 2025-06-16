@@ -30,6 +30,25 @@ def test_full_image_features():
     assert len(ds.x) == 35
     assert len(ds.feature) == 384
 
+def test_full_image_features_siglip2():
+    args = DinotoolConfig(
+        model_name="hf-hub:timm/ViT-B-16-SigLIP2-512",
+        input="test/data/magpie.jpg",
+        output="test/outputs/out-siglip2.jpg",
+        save_features="full",
+    )
+
+    main(args)
+    assert os.path.exists("test/outputs/out-siglip2.jpg")
+    assert os.path.exists("test/outputs/out-siglip2.nc")
+    import xarray as xr
+
+    ds = xr.open_dataarray("test/outputs/out-siglip2.nc")
+    assert len(ds.frame_idx) == 1
+    assert len(ds.y) == 32
+    assert len(ds.x) == 32
+    assert len(ds.feature) == 768
+
 
 def test_full_image_features_flat():
     args = DinotoolConfig(
@@ -45,6 +64,7 @@ def test_full_image_features_flat():
 
     df = pd.read_parquet("test/outputs/out.parquet")
     assert df.shape == (910, 384)
+
 
 def test_full_image_features_frame():
     args = DinotoolConfig(
@@ -131,6 +151,7 @@ def test_full_video_file_features_flat():
     assert os.path.exists("test/outputs/nasaout5.parquet")
     df = dd.read_parquet("test/outputs/nasaout5.parquet")
 
+
 def test_full_video_file_features_frame():
     args = DinotoolConfig(
         input="test/data/nasa.mp4",
@@ -141,8 +162,10 @@ def test_full_video_file_features_frame():
 
     main(args)
     import pandas as pd
+
     df = pd.read_parquet("test/outputs/nasaout6.parquet")
     assert df.shape == (90, 384)
+
 
 def test_full_video_folder_features_flat():
     args = DinotoolConfig(

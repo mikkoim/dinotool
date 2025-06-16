@@ -1,6 +1,8 @@
+import pandas as pd
+import numpy as np
 import torch
 from dinotool import data
-from dinotool.model import DinoFeatureExtractor, PCAModule, load_dino_model
+from dinotool.model import DinoFeatureExtractor, OpenCLIPFeatureExtractor, PCAModule, load_model
 from dinotool.utils import BatchHandler, frame_visualizer
 import os
 import uuid
@@ -9,7 +11,7 @@ import subprocess
 from pathlib import Path
 import xarray as xr
 from dataclasses import dataclass
-from typing import Tuple, Dict, List
+from typing import Tuple, Dict, List, Literal
 import shutil
 
 import argparse
@@ -91,7 +93,21 @@ class DinotoolConfig:
     save_features: str = None
 
 
-def save_batch_features(batch_frames, method, output):
+def save_batch_features(batch_frames: List[data.FrameData],
+                        method: Literal["full", "flat"],
+                        output: str):
+    """
+    Save features from a batch of frames to a file.
+    Args:
+        batch_frames (List[data.FrameData]): List of FrameData objects containing features.
+        method (str): Method to save features, either "full" for netCDF or "flat" for parquet.
+        output (str): Output file path without extension.
+    Returns:
+        None
+    Side Effects:
+        Saves features to a file in the specified format.
+    """
+
     if method == "full":
         f_data = data.create_xarray_from_batch_frames(batch_frames)
         f_data.to_netcdf(f"{output}.nc")
@@ -100,7 +116,23 @@ def save_batch_features(batch_frames, method, output):
         f_data.to_parquet(f"{output}.parquet")
 
 
-def combine_frame_features(method, tmpdir, feature_out_name):
+def combine_frame_features(method: Literal["full", "flat"],
+                           tmpdir: str,
+                           feature_out_name: str):
+    """
+    Combine features from temporary files into a single output file or directory.
+    For "full" method, it combines netCDF files into a single zarr directory.
+    For "flat" method, it moves parquet files into a specified directory into
+    partitioned parquet files.
+    Args:
+        method (str): Method used to save features, either "full" for netCDF or "flat" for parquet.
+        tmpdir (str): Temporary directory containing feature files.
+        feature_out_name (str): Output file name without extension.
+    Returns:
+        None
+    Side Effects:
+        Saves features to a file or directory in the specified format.
+    """
     if method == "full":
         nc_files = sorted(Path(tmpdir).glob("*.nc"))
 
@@ -121,10 +153,16 @@ def combine_frame_features(method, tmpdir, feature_out_name):
             idx += 1
         print(f"Saved features to {feature_out_name}")
 
-def handle_frame_level_features(input, extractor, output):
-    import pandas as pd
-    import numpy as np
-
+def handle_frame_level_features(input: torch.Tensor,
+                                extractor: DinoFeatureExtractor,
+                                output: str):
+    """
+    Handle frame-level/global feature extraction and saving.
+    Args:
+        input (torch.Tensor): Input video or tensor of frames.
+        extractor (DinoFeatureExtractor): Feature extractor instance.
+        output (str): Output file path without extension.
+    """
     if isinstance(input, torch.Tensor):
         features = extractor(input, return_clstoken=True).cpu().numpy()
         np.savetxt(f"{output}.txt", features, delimiter=",")
@@ -162,12 +200,34 @@ def handle_frame_level_features(input, extractor, output):
     subprocess.run(["rm", "-r", f"{tmpdir}"])
     print(f"Saved features to {output}.parquet")
 
+def load_extractor(model_name: str, 
+                   model: torch.nn.Module = None,
+                   input_size: Tuple[int, int] = None,
+                   device: str = "cuda"):
+    """
+    Loads a feature extractor based on the model name.
+    Args:
+        model_name (str): Name of the model to load. Is used to determine the type of extractor.
+        model (torch.nn.Module, optional): Preloaded model. Defaults to None.
+        input_size (Tuple[int, int], optional): Input size for the model. Defaults to None.
+        device (str, optional): Device to use for computation. Defaults to "cuda".
+    Returns:
+        DinoFeatureExtractor: Initialized feature extractor.
+    """
+    if model_name.startswith("hf-hub:timm"):
+        extractor = OpenCLIPFeatureExtractor(
+            model, input_size=input_size, device=device
+        )
+    else:
+        extractor = DinoFeatureExtractor(model, input_size=input_size, device=device)
+    return extractor
 
 def main(args: DinotoolConfig):
-    model = load_dino_model(args.model_name)
+    model = load_model(args.model_name)
     print(f"Using model: {args.model_name}")
 
     input = data.input_pipeline(
+        args.model_name,
         args.input,
         patch_size=model.patch_size,
         batch_size=args.batch_size,
@@ -186,7 +246,11 @@ def main(args: DinotoolConfig):
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"Using device: {device}")
-    extractor = DinoFeatureExtractor(model, input_size=input["input_size"], device=device)
+    extractor = load_extractor(
+        model_name=args.model_name,
+        model=model,
+        input_size=input["input_size"],
+        device=device)
 
     if args.save_features == 'frame':
         handle_frame_level_features(input["data"],

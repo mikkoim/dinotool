@@ -25,6 +25,7 @@ dependencies = [
     "einops>=0.8.1",
     "h5py>=3.13.0",
     "numpy>=2.0.0",
+    "open-clip-torch>=2.32.0",
     "opencv-python>=4.11.0.86",
     "pillow>=11.1.0",
     "pyarrow>=19.0.1",

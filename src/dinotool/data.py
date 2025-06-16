@@ -177,8 +177,18 @@ def calculate_dino_dimensions(
     }
 
 
-def input_pipeline(input, patch_size, batch_size=1, resize_size=None):
+def input_pipeline(model_name, input, patch_size, batch_size=1, resize_size=None):
     """Handles transformation and dimension calculations for video or image input"""
+    predefined_transform = False
+
+    if model_name.startswith("hf-hub:timm"):
+        from open_clip import create_model_from_pretrained
+        _, transform = create_model_from_pretrained(model_name)
+        # Pass a dummy image to get the resize size
+        resize_size = tuple(transform(Image.fromarray(np.zeros((224, 224, 3), dtype=np.uint8))).shape[1:3])
+        print(f"Using OpenCLIP model {model_name} transforms {transform} with resize size {resize_size}")
+        predefined_transform = True
+
     try:
         img = Image.open(input)
         original_input_size = img.size
@@ -196,13 +206,14 @@ def input_pipeline(input, patch_size, batch_size=1, resize_size=None):
     input_size = (dims["w"], dims["h"])
     feature_map_size = (dims["w_featmap"], dims["h_featmap"])
 
-    transform = transforms.Compose(
-        [
-            transforms.Resize((input_size[1], input_size[0])),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
+    if not predefined_transform:
+        transform = transforms.Compose(
+            [
+                transforms.Resize((input_size[1], input_size[0])),
+                transforms.ToTensor(),
+                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
 
     if is_image:
         img_tensor = transform(img).unsqueeze(0)

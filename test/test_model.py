@@ -84,13 +84,14 @@ def test_pca_module_nonflat():
 
 
 def test_batch_handler():
-    from dinotool.model import load_dino_model, PCAModule, DinoFeatureExtractor
+    from dinotool.model import load_model, PCAModule, DinoFeatureExtractor
     from dinotool.data import input_pipeline
     from dinotool.utils import BatchHandler
 
-    model = load_dino_model("dinov2_vits14_reg")
+    model = load_model("dinov2_vits14_reg")
 
     input = input_pipeline(
+        "dinov2_vits14_reg",
         "test/data/nasa.mp4", patch_size=model.patch_size, batch_size=1
     )
     batch = next(iter(input["data"]))
@@ -110,13 +111,14 @@ def test_batch_handler():
 
 
 def test_feature_saving():
-    from dinotool.model import load_dino_model, PCAModule, DinoFeatureExtractor
+    from dinotool.model import load_model, PCAModule, DinoFeatureExtractor
     from dinotool.data import input_pipeline, create_xarray_from_batch_frames
     from dinotool.utils import BatchHandler
 
-    model = load_dino_model("dinov2_vits14_reg")
+    model = load_model("dinov2_vits14_reg")
 
     input = input_pipeline(
+        "dinov2_vits14_reg",
         "test/data/nasa.mp4", patch_size=model.patch_size, batch_size=2
     )
     batch = next(iter(input["data"]))
