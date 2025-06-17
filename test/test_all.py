@@ -1,6 +1,8 @@
 from dinotool.cli import DinotoolConfig, DinotoolProcessor
 from pathlib import Path
 import os
+import pandas as pd
+import xarray as xr
 
 Path("test/outputs").mkdir(exist_ok=True)
 
@@ -22,7 +24,6 @@ def test_full_image_features():
     processor.run()
     assert os.path.exists("test/outputs/out.jpg")
     assert os.path.exists("test/outputs/out.nc")
-    import xarray as xr
 
     ds = xr.open_dataarray("test/outputs/out.nc")
     assert len(ds.frame_idx) == 1
@@ -41,14 +42,12 @@ def test_full_image_features_siglip2():
     processor.run()
     assert os.path.exists("test/outputs/out-siglip2.jpg")
     assert os.path.exists("test/outputs/out-siglip2.nc")
-    import xarray as xr
 
     ds = xr.open_dataarray("test/outputs/out-siglip2.nc")
     assert len(ds.frame_idx) == 1
     assert len(ds.y) == 32
     assert len(ds.x) == 32
     assert len(ds.feature) == 768
-
 
 def test_full_image_features_flat():
     config = DinotoolConfig(
@@ -60,11 +59,10 @@ def test_full_image_features_flat():
     processor.run()
     assert os.path.exists("test/outputs/out.jpg")
     assert os.path.exists("test/outputs/out.parquet")
-    import pandas as pd
 
     df = pd.read_parquet("test/outputs/out.parquet")
     assert df.shape == (910, 384)
-
+    assert df.index.names == ['frame_idx', 'patch_idx']
 
 def test_full_image_features_frame():
     config = DinotoolConfig(
@@ -76,7 +74,6 @@ def test_full_image_features_frame():
     processor.run()
 
     assert os.path.exists("test/outputs/out.txt")
-    import pandas as pd
 
     df = pd.read_csv("test/outputs/out.txt", header=None)
     assert df.shape == (1, 384)
@@ -94,7 +91,7 @@ def test_full_video_file():
 
 def test_full_video_folder():
     config = DinotoolConfig(
-        input="test/data/nasa_frames", output="test/outputs/nasaout2.mp4", batch_size=4
+        input="test/data/nasa_frames_small", output="test/outputs/nasaout2.mp4", batch_size=4
     )
 
     processor = DinotoolProcessor(config)
@@ -112,8 +109,6 @@ def test_full_video_file_features():
     processor = DinotoolProcessor(config)
     processor.run()
 
-    import xarray as xr
-
     assert os.path.exists("test/outputs/nasaout3.zarr")
     ds = xr.open_dataarray("test/outputs/nasaout3.zarr")
     assert len(ds.frame_idx) == 90
@@ -124,7 +119,7 @@ def test_full_video_file_features():
 
 def test_full_video_folder_features():
     config = DinotoolConfig(
-        input="test/data/nasa_frames",
+        input="test/data/nasa_frames_small",
         output="test/outputs/nasaout4.mp4",
         batch_size=4,
         save_features="full",
@@ -132,7 +127,6 @@ def test_full_video_folder_features():
 
     processor = DinotoolProcessor(config)
     processor.run()
-    import xarray as xr
 
     assert os.path.exists("test/outputs/nasaout4.zarr")
     ds = xr.open_dataarray("test/outputs/nasaout4.zarr")
@@ -152,10 +146,9 @@ def test_full_video_file_features_flat():
     processor = DinotoolProcessor(config)
     processor.run()
 
-    import dask.dataframe as dd
-
     assert os.path.exists("test/outputs/nasaout5.parquet")
-    df = dd.read_parquet("test/outputs/nasaout5.parquet")
+    df = pd.read_parquet("test/outputs/nasaout5.parquet")
+    assert df.shape == (58140, 384)
 
 
 def test_full_video_file_features_frame():
@@ -168,15 +161,14 @@ def test_full_video_file_features_frame():
     processor = DinotoolProcessor(config)
     processor.run()
 
-    import pandas as pd
-
+    assert os.path.exists("test/outputs/nasaout6.parquet")
     df = pd.read_parquet("test/outputs/nasaout6.parquet")
     assert df.shape == (90, 384)
 
 
 def test_full_video_folder_features_flat():
     config = DinotoolConfig(
-        input="test/data/nasa_frames",
+        input="test/data/nasa_frames_small",
         output="test/outputs/nasaout7.mp4",
         batch_size=4,
         save_features="flat",
@@ -184,7 +176,46 @@ def test_full_video_folder_features_flat():
     processor = DinotoolProcessor(config)
     processor.run()
 
-    import dask.dataframe as dd
-
     assert os.path.exists("test/outputs/nasaout7.parquet")
-    df = dd.read_parquet("test/outputs/nasaout7.parquet")
+    df = pd.read_parquet("test/outputs/nasaout7.parquet")
+    assert df.shape == (56202, 384)
+
+def test_full_imagedir():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1"
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    output_dir = Path("test/outputs/if1")
+    assert output_dir.exists()
+    assert len(list(output_dir.glob("*.jpg"))) == 4
+
+def test_full_imagedir_features_full():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1",
+        save_features="full"
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    output_dir = Path("test/outputs/if1")
+    assert output_dir.exists()
+    assert len(list(output_dir.glob("*.jpg"))) == 4
+
+    ds = xr.open_dataarray("test/outputs/if1/bird1.nc")
+    assert len(ds.frame_idx) == 1
+    assert len(ds.y) == 64
+    assert len(ds.x) == 64
+    assert len(ds.feature) == 384
+
+def test_full_imagedir_features_flat():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1",
+        save_features="flat"
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()

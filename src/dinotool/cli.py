@@ -293,65 +293,89 @@ class FeatureSaver:
 
 class FrameLevelProcessor:
     """Handles frame-level feature extraction."""
-    
+
     def __init__(self, extractor: DinoFeatureExtractor):
         self.extractor = extractor
-    
-    def process(self, input_data: Union[torch.Tensor, object], output: str) -> None:
-        """Handle frame-level/global feature extraction and saving."""
-        if isinstance(input_data, torch.Tensor):
-            self._process_tensor(input_data, output)
-        else:
-            self._process_video_frames(input_data, output)
-    
-    def _process_tensor(self, tensor: torch.Tensor, output: str) -> None:
-        """Process a single tensor and save features."""
-        features = self.extractor(tensor, return_clstoken=True).cpu().numpy()
-        np.savetxt(f"{output}.txt", features, delimiter=",")
-        print(f"Saved features to {output}.txt")
-    
-    def _process_video_frames(self, video_data: object, output: str) -> None:
-        """Process video frames and save features."""
-        print("Extracting frame-level features. This does not produce a video output.")
-        
-        tmpdir = Path(f"temp_dinotool_frames-{uuid.uuid4()}")
-        tmpdir.mkdir()
-        
+
+    def process(self, input_data: Dict, output_path_base: str) -> None:
+        """
+        Handle frame-level/global feature extraction and saving for various input types.
+        output_path_base will be used to construct the final output file(s).
+        """
+        input_type = input_data["input_type"]
+        data_source = input_data["data"]
+
+        if input_type == "single_image":
+            tensor = data_source
+            features = self.extractor(tensor, return_clstoken=True).cpu().numpy()
+            np.savetxt(f"{output_path_base}.txt", features, delimiter=",")
+            print(f"Saved frame features to {output_path_base}.txt")
+
+        elif input_type in ["video_file", "video_dir"]:
+            print("Extracting frame-level features from video. This does not produce a video output.")
+            tmpdir = Path(f"temp_dinotool_frames-{uuid.uuid4()}")
+            tmpdir.mkdir()
+
+            try:
+                self._extract_frame_features_from_iterable(data_source, tmpdir)
+                FeatureSaver._combine_parquet_files(tmpdir, f"{output_path_base}.parquet")
+            finally:
+                self._cleanup_temp_dir(tmpdir)
+            print(f"Saved frame features to {output_path_base}.parquet")
+
+        elif input_type == "image_directory":
+            print("Extracting frame-level features from image directory for single parquet output.")
+            
+            all_features_dfs = []
+            progbar = tqdm(total=len(input_data["source"]))
+            for batch in data_source:
+                filename = batch['filename'][0]
+                filename_stem = Path(filename).stem
+                
+                # Adapt extractor input size dynamically for each image in the directory
+                feature_map_size = tuple(x.item() for x in batch['feature_map_size'])
+                current_input_size = self.extractor.patch_size * np.array(feature_map_size)
+                self.extractor.set_input_size(current_input_size)
+                
+                features = self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
+                
+                columns = [f"feature_{i}" for i in range(features.shape[1])]
+                # Create DataFrame for current image's features, using filename_stem as index
+                df = pd.DataFrame(features, index=[filename_stem], columns=columns)
+                all_features_dfs.append(df)
+                
+                progbar.set_description(f"Processed {filename_stem}")
+                progbar.update(1)
+            progbar.close()
+
+            # Concatenate all DataFrames and save to a single parquet file
+            if all_features_dfs:
+                combined_df = pd.concat(all_features_dfs, axis=0)
+                final_output_path = Path(output_path_base).with_suffix('.parquet')
+                combined_df.to_parquet(final_output_path)
+                print(f"Saved combined frame features to {final_output_path}")
+            else:
+                print("No images found or processed in the directory to save frame features.")
+
+    def _extract_frame_features_from_iterable(self, data_iterable: object, tmpdir: Path) -> None:
+        """Extract features from an iterable (e.g., video loader) into temporary files."""
+        progbar = tqdm(total=len(data_iterable))
+
         try:
-            self._extract_frame_features(video_data, tmpdir)
-            self._combine_frame_features(tmpdir, output)
-        finally:
-            self._cleanup_temp_dir(tmpdir)
-    
-    def _extract_frame_features(self, video_data: object, tmpdir: Path) -> None:
-        """Extract features from video frames."""
-        progbar = tqdm(total=len(video_data))
-        
-        try:
-            for idx, batch in enumerate(video_data):
+            for idx, batch in enumerate(data_iterable):
                 features = self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
                 frame_idx = batch["frame_idx"].cpu().numpy()
-                
+
                 columns = [f"feature_{i}" for i in range(features.shape[1])]
                 df = pd.DataFrame(features, index=frame_idx, columns=columns)
                 df.to_parquet(tmpdir / f"{idx:05d}.parquet")
-                
+
                 progbar.update(1)
         except KeyboardInterrupt:
             print("Keyboard interrupt detected. Cleaning up...")
             progbar.close()
             raise
-    
-    def _combine_frame_features(self, tmpdir: Path, output: str) -> None:
-        """Combine frame features into a single file."""
-        Path(output).parent.mkdir(parents=True, exist_ok=True)
-        parquet_files = sorted(tmpdir.glob("*.parquet"))
-        
-        combined_df = pd.concat([pd.read_parquet(f) for f in parquet_files], axis=0)
-        combined_df.to_parquet(f"{output}.parquet")
-        
-        print(f"Saved features to {output}.parquet")
-    
+
     @staticmethod
     def _cleanup_temp_dir(tmpdir: Path) -> None:
         """Clean up temporary directory."""
@@ -431,7 +455,7 @@ class DinotoolProcessor:
         if self.config.save_features == 'frame':
             processor = FrameLevelProcessor(extractor)
             output_path = Path(self.config.output).with_suffix('')
-            processor.process(input_data["data"], str(output_path))
+            processor.process(input_data, str(output_path))
             return
         
         if input_data["input_type"] in ["video_dir", "video_file"]:
@@ -581,6 +605,8 @@ class DinotoolProcessor:
         for batch in input_data["data"]:
             filename = batch['filename'][0]
             filename_stem = Path(filename).stem
+
+            # Adapt extractor input size dynamically for each image in the directory
             feature_map_size = tuple(x.item() for x in batch['feature_map_size'])
             input_size = extractor.patch_size * np.array(feature_map_size)
             progbar.set_description(f"Processing {filename}. Input size: {input_size}")
