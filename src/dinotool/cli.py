@@ -470,6 +470,8 @@ class DinotoolProcessor:
         """Process a single image."""
         batch = {"img": input_data.data}
         features = extractor(batch["img"])
+
+        Path(self.config.output).parent.mkdir(parents=True, exist_ok=True)
         
         # Setup PCA
         if not self.config.no_vis:
@@ -620,15 +622,16 @@ class DinotoolProcessor:
             if not self.config.no_vis:
                 pca = PCAModule(n_components=3, feature_map_size=feature_map_size)
                 pca.fit(features.flat().tensor, verbose=False)
+                pca_array = pca.transform(features.flat().tensor, flattened=False)[0]
             else:
                 pca = None
-                features = extractor(batch["img"], return_clstoken=True)
+                pca_array = None
 
             frame = data.FrameData(
                 img=input_data.source.get_by_name(filename),
                 features=features.full()[0],
-                pca=pca.transform(features.flat().tensor, flattened=False)[0],
                 frame_idx=0,
+                pca=pca_array,  # PCA features if visualization is enabled
             )
             
             # Save visualization
