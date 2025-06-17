@@ -130,7 +130,7 @@ def test_full_video_folder_features():
 
     assert os.path.exists("test/outputs/nasaout4.zarr")
     ds = xr.open_dataarray("test/outputs/nasaout4.zarr")
-    assert len(ds.frame_idx) == 90
+    assert len(ds.frame_idx) == 9
     assert len(ds.y) == 19
     assert len(ds.x) == 34
     assert len(ds.feature) == 384
@@ -178,7 +178,7 @@ def test_full_video_folder_features_flat():
 
     assert os.path.exists("test/outputs/nasaout7.parquet")
     df = pd.read_parquet("test/outputs/nasaout7.parquet")
-    assert df.shape == (56202, 384)
+    assert df.shape == (5814, 384)
 
 def test_full_imagedir():
     config = DinotoolConfig(

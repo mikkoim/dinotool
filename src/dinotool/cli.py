@@ -297,16 +297,16 @@ class FrameLevelProcessor:
     def __init__(self, extractor: DinoFeatureExtractor):
         self.extractor = extractor
 
-    def process(self, input_data: Dict, output_path_base: str) -> None:
+    def process(self, input_data: data.InputData, output_path_base: str) -> None:
         """
         Handle frame-level/global feature extraction and saving for various input types.
         output_path_base will be used to construct the final output file(s).
         """
-        input_type = input_data["input_type"]
-        data_source = input_data["data"]
+        input_type = input_data.input_type
+        data = input_data.data
 
         if input_type == "single_image":
-            tensor = data_source
+            tensor = data
             features = self.extractor(tensor, return_clstoken=True).cpu().numpy()
             np.savetxt(f"{output_path_base}.txt", features, delimiter=",")
             print(f"Saved frame features to {output_path_base}.txt")
@@ -317,7 +317,7 @@ class FrameLevelProcessor:
             tmpdir.mkdir()
 
             try:
-                self._extract_frame_features_from_iterable(data_source, tmpdir)
+                self._extract_frame_features_from_iterable(data, tmpdir)
                 FeatureSaver._combine_parquet_files(tmpdir, f"{output_path_base}.parquet")
             finally:
                 self._cleanup_temp_dir(tmpdir)
@@ -327,8 +327,8 @@ class FrameLevelProcessor:
             print("Extracting frame-level features from image directory for single parquet output.")
             
             all_features_dfs = []
-            progbar = tqdm(total=len(input_data["source"]))
-            for batch in data_source:
+            progbar = tqdm(total=len(input_data.source))
+            for batch in data:
                 filename = batch['filename'][0]
                 filename_stem = Path(filename).stem
                 
@@ -428,7 +428,7 @@ class DinotoolProcessor:
     def run(self) -> None:
         """Run the main processing pipeline."""
         # Load model and setup
-        model = load_model(self.config.model_name)
+        model: torch.nn.Module = load_model(self.config.model_name)
         print(f"Using model: {self.config.model_name}")
         print(f"Model patch size: {model.patch_size}")
         print(f"Using device: {self.device}")
@@ -441,13 +441,13 @@ class DinotoolProcessor:
             batch_size=self.config.batch_size,
             resize_size=self.config.input_size,
         )
-        input_data = input_processor.process()
+        input_data: data.InputData = input_processor.process()
         
         # Create extractor
         extractor = ExtractorFactory.create_extractor(
             model_name=self.config.model_name,
             model=model,
-            input_size=input_data["input_size"],
+            input_size=input_data.input_size,
             device=self.device
         )
         
@@ -458,27 +458,27 @@ class DinotoolProcessor:
             processor.process(input_data, str(output_path))
             return
         
-        if input_data["input_type"] in ["video_dir", "video_file"]:
+        if input_data.input_type in ["video_dir", "video_file"]:
             self._process_video(input_data, extractor)
-        elif input_data["input_type"] == "single_image":
+        elif input_data.input_type  == "single_image":
             self._process_image(input_data, extractor)
-        elif input_data["input_type"] == "image_directory":
+        elif input_data.input_type == "image_directory":
             self._process_image_directory(input_data, extractor)
         else:
-            raise ValueError(f"Unsupported input type: {input_data['input_type']}")
+            raise ValueError(f"Unsupported input type: {input_data.input_type}")
     
-    def _process_image(self, input_data: Dict, extractor: DinoFeatureExtractor) -> None:
+    def _process_image(self, input_data: data.InputData, extractor: DinoFeatureExtractor) -> None:
         """Process a single image."""
-        batch = {"img": input_data["data"]}
+        batch = {"img": input_data.data}
         
         # Setup PCA
-        pca = PCAModule(n_components=3, feature_map_size=input_data["feature_map_size"])
+        pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
         features = extractor(batch["img"])
         pca.fit(features)
         
         # Create frame data
         frame = data.FrameData(
-            img=input_data["source"],
+            img=input_data.source,
             features=extractor.reshape_features(features)[0],
             pca=pca.transform(features, flattened=False)[0],
             frame_idx=0,
@@ -489,7 +489,7 @@ class DinotoolProcessor:
         if not self.config.no_vis:
             out_img = frame_visualizer(
                 frame, 
-                output_size=input_data["input_size"], 
+                output_size=input_data.input_size, 
                 only_pca=self.config.only_pca
             )
             out_img.save(self.config.output)
@@ -507,11 +507,11 @@ class DinotoolProcessor:
             extension = ".nc" if self.config.save_features == "full" else ".parquet"
             print(f"Saved features to {output_stem}{extension}")
     
-    def _process_video(self, input_data: Dict, extractor: DinoFeatureExtractor) -> None:
+    def _process_video(self, input_data: data.InputData, extractor: DinoFeatureExtractor) -> None:
         """Process a video."""
         # Setup PCA
-        batch = next(iter(input_data["data"]))
-        pca = PCAModule(n_components=3, feature_map_size=input_data["feature_map_size"])
+        batch = next(iter(input_data.data))
+        pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
         features = extractor(batch["img"])
         pca.fit(features)
         
@@ -522,8 +522,8 @@ class DinotoolProcessor:
             feature_out_name = Path(self.config.output).with_suffix(extension)
         
         # Process video
-        progbar = tqdm(total=len(input_data["source"]))
-        batch_handler = BatchHandler(input_data["source"], extractor, pca, progress_bar=progbar)
+        progbar = tqdm(total=len(input_data.source))
+        batch_handler = BatchHandler(input_data.source, extractor, pca, progress_bar=progbar)
         tmpdir = f"temp_dinotool_frames-{uuid.uuid4()}"
         os.mkdir(tmpdir)
         
@@ -535,7 +535,7 @@ class DinotoolProcessor:
             # Create output video
             if not self.config.no_vis:
                 try:
-                    framerate = input_data["source"].framerate
+                    framerate = input_data.source.framerate
                 except (ValueError, AttributeError):
                     framerate = 30
                 
@@ -557,7 +557,7 @@ class DinotoolProcessor:
     
     def _process_video_batches(
         self, 
-        input_data: Dict, 
+        input_data: data.InputData, 
         batch_handler: BatchHandler, 
         tmpdir: str,
         feature_out_name: Optional[Path]
@@ -565,7 +565,7 @@ class DinotoolProcessor:
         """Process video batches."""
         
         try:
-            for batch in input_data["data"]:
+            for batch in input_data.data:
                 batch_frames = batch_handler(batch)
                 
                 # Save visualization frames
@@ -573,7 +573,7 @@ class DinotoolProcessor:
                     for frame in batch_frames:
                         out_img = frame_visualizer(
                             frame,
-                            output_size=input_data["input_size"],
+                            output_size=input_data.input_size,
                             only_pca=self.config.only_pca
                         )
                         out_img.save(f"{tmpdir}/{frame.frame_idx:05d}.jpg")
@@ -594,15 +594,15 @@ class DinotoolProcessor:
     
     def _process_image_directory(
         self,
-        input_data: Dict,
+        input_data: data.InputData,
         extractor: DinoFeatureExtractor
     ) -> None:
         """Process a directory of images. Supports only batch size of 1."""
         out_dir = Path(self.config.output)
         out_dir.mkdir(parents=True, exist_ok=True)
         
-        progbar = tqdm(total=len(input_data["source"]))
-        for batch in input_data["data"]:
+        progbar = tqdm(total=len(input_data.source))
+        for batch in input_data.data:
             filename = batch['filename'][0]
             filename_stem = Path(filename).stem
 
@@ -617,7 +617,7 @@ class DinotoolProcessor:
             pca.fit(features, verbose=False)
 
             frame = data.FrameData(
-                img=input_data["source"].get_by_name(filename),
+                img=input_data.source.get_by_name(filename),
                 features=extractor.reshape_features(features)[0],
                 pca=pca.transform(features, flattened=False)[0],
                 frame_idx=0,

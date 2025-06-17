@@ -317,6 +317,19 @@ class TransformFactory:
         elif self.model_type == "dino":
             return self.get_dino_transform(input_size)
 
+@dataclass
+class InputData:
+    """
+    Data class to hold input data for feature extraction.
+    This class is used to store the source image or video, the transformed data,
+    and the input and feature map sizes.
+    """
+    source: Union[Image.Image, Video, ImageDirectory]
+    data: Union[torch.Tensor, DataLoader]
+    input_size: Optional[Tuple[int, int]] = None
+    feature_map_size: Optional[Tuple[int, int]] = None
+    input_type: str = "unknown"
+
 class InputProcessor:
     """
     Class to handle input processing for feature extraction models.
@@ -378,13 +391,13 @@ class InputProcessor:
             print(f"Resizing all input to {self.resize_size}")
         ds = ImageDirectoryDataset(self.source, transform_factory=transform_factory, resize_size=self.resize_size)
         dataloader = DataLoader(ds, batch_size=self.batch_size, shuffle=False)
-        return {
-            "source": self.source,
-            "data": dataloader,
-            "input_size": None,
-            "feature_map_size": None,
-            "input_type": self.input_type,
-        }
+        return InputData(
+            source=self.source,
+            data=dataloader,
+            input_size=None,  # Varying size, so no fixed input size
+            feature_map_size=None,  # Varying size, so no fixed feature map size
+            input_type=self.input_type,
+        )
 
     def process_fixed_size(self):
         """
@@ -407,23 +420,23 @@ class InputProcessor:
 
         if self.input_type == "single_image":
             img_tensor = self.transform.transform(self.source).unsqueeze(0)
-            return {
-                "source": self.source,
-                "data": img_tensor,
-                "input_size": self.transform.resize_size,
-                "feature_map_size": self.transform.feature_map_size,
-                "input_type": self.input_type,
-            }
+            return InputData(
+                source=self.source,
+                data=img_tensor,
+                input_size=self.transform.resize_size,
+                feature_map_size=self.transform.feature_map_size,
+                input_type=self.input_type,
+            )
         elif self.input_type in ["video_dir", "video_file"]:
             ds = VideoDataset(self.source, transform=self.transform.transform)
             dataloader = DataLoader(ds, batch_size=self.batch_size, shuffle=False)
-            return {
-                "source": self.source,
-                "data": dataloader,
-                "input_size": self.transform.resize_size,
-                "feature_map_size": self.transform.feature_map_size,
-                "input_type": self.input_type,
-            }
+            return InputData(
+                source=self.source,
+                data=dataloader,
+                input_size=self.transform.resize_size,
+                feature_map_size=self.transform.feature_map_size,
+                input_type=self.input_type,
+            )
         else:
             raise ValueError(f"Unknown input type: {self.input_type}")
 

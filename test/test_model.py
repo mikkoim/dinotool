@@ -94,16 +94,16 @@ def test_batch_handler():
         "dinov2_vits14_reg",
         "test/data/nasa.mp4", patch_size=model.patch_size, batch_size=1
     )
-    input = input_processor.process()
-    batch = next(iter(input["data"]))
+    input_data = input_processor.process()
+    batch = next(iter(input_data.data))
 
-    extractor = DinoFeatureExtractor(model, input_size=input["input_size"])
+    extractor = DinoFeatureExtractor(model, input_size=input_data.input_size)
     features = extractor(batch["img"])
 
-    pca = PCAModule(n_components=3, feature_map_size=input["feature_map_size"])
+    pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
     pca.fit(features)
 
-    batch_handler = BatchHandler(input["source"], extractor, pca)
+    batch_handler = BatchHandler(input_data.source, extractor, pca)
 
     batch_frames = batch_handler(batch)
     assert batch_frames[0].img.size == (480, 270)
@@ -122,17 +122,17 @@ def test_feature_saving():
         "dinov2_vits14_reg",
         "test/data/nasa.mp4", patch_size=model.patch_size, batch_size=2
     )
-    input = input_processor.process()
-    batch = next(iter(input["data"]))
+    input_data = input_processor.process()
+    batch = next(iter(input_data.data))
 
-    extractor = DinoFeatureExtractor(model, input_size=input["input_size"])
+    extractor = DinoFeatureExtractor(model, input_size=input_data.input_size)
     features = extractor(batch["img"])
-    pca = PCAModule(n_components=3, feature_map_size=input["feature_map_size"])
+    pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
     pca.fit(features)
 
-    batch_handler = BatchHandler(input["source"], extractor, pca)
+    batch_handler = BatchHandler(input_data.source, extractor, pca)
     i = 0
-    for batch in input["data"]:
+    for batch in input_data.data:
         batch_frames = batch_handler(batch)
         f_data = create_xarray_from_batch_frames(batch_frames)
         i += 1
