@@ -13,27 +13,121 @@ from einops import rearrange
 import pandas as pd
 from collections import defaultdict
 
+import torch
+from einops import rearrange
+
+class LocalFeatures:
+    def __init__(self, tensor: torch.Tensor, *, is_flattened=False, is_normalized=False, h=None, w=None):
+        """
+        tensor: torch.Tensor of shape (b, h, w, f) or (b, h*w, f)
+        """
+        self.tensor = tensor
+        self.is_flattened = is_flattened
+        self.is_normalized = is_normalized
+
+        shape = tensor.shape
+        if not is_flattened and len(shape) == 4:
+            self.b, self.h, self.w, self.f = shape
+        elif is_flattened and len(shape) == 3:
+            self.b, hw, self.f = shape
+            if h is None or w is None:
+                raise ValueError("Flattened input requires h and w.")
+            self.h, self.w = h, w
+        else:
+            raise ValueError("Unexpected tensor shape for LocalFeatures.")
+
+    def flat(self):
+        """Return a new LocalFeatures instance with (b, h*w, f) shape."""
+        if self.is_flattened:
+            return self
+        flat_tensor = rearrange(self.tensor, "b h w f -> b (h w) f")
+        return LocalFeatures(flat_tensor, is_flattened=True, is_normalized=self.is_normalized, h=self.h, w=self.w)
+
+    def full(self):
+        """Return a new LocalFeatures instance with (b, h, w, f) shape."""
+        if not self.is_flattened:
+            return self
+        full_tensor = rearrange(self.tensor, "b (h w) f -> b h w f", h=self.h, w=self.w)
+        return LocalFeatures(full_tensor, is_flattened=False, is_normalized=self.is_normalized)
+
+    def normalize(self, eps=1e-8):
+        """L2-normalize along feature dimension."""
+        normed = torch.nn.functional.normalize(self.tensor, p=2, dim=-1, eps=eps)
+        return LocalFeatures(
+            normed,
+            is_flattened=self.is_flattened,
+            is_normalized=True,
+            h=self.h,
+            w=self.w,
+        )
+
+    def clone(self):
+        """Clone the underlying tensor and metadata."""
+        return LocalFeatures(
+            self.tensor.clone(),
+            is_flattened=self.is_flattened,
+            is_normalized=self.is_normalized,
+            h=self.h,
+            w=self.w,
+        )
+
+    def to(self, *args, **kwargs):
+        """Move tensor to device/dtype."""
+        return LocalFeatures(
+            self.tensor.to(*args, **kwargs),
+            is_flattened=self.is_flattened,
+            is_normalized=self.is_normalized,
+            h=self.h,
+            w=self.w,
+        )
+
+    def __repr__(self):
+        layout = "flat" if self.is_flattened else "full"
+        norm = "normalized" if self.is_normalized else "unnormalized"
+        return f"LocalFeatures({layout}, {norm}, shape={tuple(self.tensor.shape)})"
+
+    def __getitem__(self, index):
+        """Index the batch dimension and return a new LocalFeatures object."""
+        indexed_tensor = self.tensor[index]
+        return LocalFeatures(
+            indexed_tensor.unsqueeze(0),  # Add batch dim back
+            is_flattened=self.is_flattened,
+            is_normalized=self.is_normalized,
+            h=self.h,
+            w=self.w,
+        )
+
+    @property
+    def shape(self):
+        return self.tensor.shape
 
 @dataclass
 class FrameData:
     img: Image.Image
-    features: torch.Tensor
+    features: LocalFeatures
     pca: np.ndarray
     frame_idx: int
-    flattened: bool
 
     def __post_init__(self):
-        if self.flattened:
-            if self.features.ndim != 2:
-                raise ValueError(f"Expected 2D features, got {self.features.ndim}D")
-            if self.pca.ndim != 2:
-                raise ValueError(f"Expected 2D PCA, got {self.pca.ndim}D")
-        else:
-            if self.features.ndim != 3:
-                raise ValueError(f"Expected 3D features, got {self.features.shape}")
-            if self.pca.ndim != 3:
-                raise ValueError(f"Expected 3D PCA, got {self.pca.shape}")
+        if not isinstance(self.features, LocalFeatures):
+            raise TypeError("features must be an instance of LocalFeatures")
+        if not isinstance(self.img, Image.Image):
+            raise TypeError("img must be an instance of PIL.Image.Image")
+        if not isinstance(self.pca, np.ndarray):
+            raise TypeError("pca must be a numpy ndarray")
+        if not isinstance(self.frame_idx, int):
+            raise TypeError("frame_idx must be an integer")
 
+        if not self.features.is_normalized:
+            raise ValueError("Features must be normalized. Use features.normalize() to normalize them.")
+        
+        if self.features.is_flattened:
+            self.features = self.features.full()
+        
+        if len(self.features.tensor.shape) != 4:
+            raise ValueError("Features tensor must have 4 dimensions (b, h, w, f) after full() call.")
+        if self.features.tensor.shape[0] != 1:
+            raise ValueError("Features tensor must have batch size of 1 after full() call.")
 
 class VideoDir:
     """
@@ -520,7 +614,7 @@ def create_xarray_from_batch_frames(batch_frames: List[FrameData]) -> xr.DataArr
     if len(set(feature_shapes)) > 1:
         raise ValueError(f"Cannot create xarray from frames with different feature shapes: {set(feature_shapes)}")
     
-    tensor = torch.stack([x.features for x in batch_frames])
+    tensor = torch.cat([x.features.full().tensor for x in batch_frames], dim=0)
     frame_idx = [x.frame_idx for x in batch_frames]
     
     # Assuming the tensor has shape (batch, height, width, feature)
@@ -555,7 +649,7 @@ def create_dataframe_from_batch_frames(batch_frames: List[FrameData]) -> pd.Data
         return pd.concat(dfs, axis=0)
     
     # All frames have the same shape - use original logic
-    tensor = torch.stack([x.features for x in batch_frames])
+    tensor = torch.cat([x.features.tensor for x in batch_frames], dim=0)
     frame_idx_set = [x.frame_idx for x in batch_frames]
 
     n_patches = tensor.shape[1] * tensor.shape[2]
@@ -580,12 +674,7 @@ def create_dataframe_from_batch_frames(batch_frames: List[FrameData]) -> pd.Data
 
 def create_dataframe_from_single_frame(frame: FrameData) -> pd.DataFrame:
     """Create DataFrame from a single frame."""
-    if frame.flattened:
-        features = frame.features.cpu().numpy()
-        n_patches = features.shape[0]
-    else:
-        features = rearrange(frame.features, "h w f -> (h w) f").cpu().numpy()
-        n_patches = features.shape[0]
+    features = frame.features.flat()
     
     frame_idx = [frame.frame_idx] * n_patches
     patch_idx = list(range(n_patches))

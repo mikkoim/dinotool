@@ -307,8 +307,8 @@ class FrameLevelProcessor:
 
         if input_type == "single_image":
             tensor = data
-            features = self.extractor(tensor, return_clstoken=True).cpu().numpy()
-            np.savetxt(f"{output_path_base}.txt", features, delimiter=",")
+            global_features = self.extractor(tensor, return_clstoken=True).cpu().numpy()
+            np.savetxt(f"{output_path_base}.txt", global_features, delimiter=",")
             print(f"Saved frame features to {output_path_base}.txt")
 
         elif input_type in ["video_file", "video_dir"]:
@@ -332,16 +332,9 @@ class FrameLevelProcessor:
                 filename = batch['filename'][0]
                 filename_stem = Path(filename).stem
                 
-                # Adapt extractor input size dynamically for each image in the directory
-                feature_map_size = tuple(x.item() for x in batch['feature_map_size'])
-                current_input_size = self.extractor.patch_size * np.array(feature_map_size)
-                self.extractor.set_input_size(current_input_size)
-                
-                features = self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
-                
-                columns = [f"feature_{i}" for i in range(features.shape[1])]
+                columns = [f"feature_{i}" for i in range(global_features.shape[1])]
                 # Create DataFrame for current image's features, using filename_stem as index
-                df = pd.DataFrame(features, index=[filename_stem], columns=columns)
+                df = pd.DataFrame(global_features, index=[filename_stem], columns=columns)
                 all_features_dfs.append(df)
                 
                 progbar.set_description(f"Processed {filename_stem}")
@@ -363,11 +356,11 @@ class FrameLevelProcessor:
 
         try:
             for idx, batch in enumerate(data_iterable):
-                features = self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
+                global_features = self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
                 frame_idx = batch["frame_idx"].cpu().numpy()
 
-                columns = [f"feature_{i}" for i in range(features.shape[1])]
-                df = pd.DataFrame(features, index=frame_idx, columns=columns)
+                columns = [f"feature_{i}" for i in range(global_features.shape[1])]
+                df = pd.DataFrame(global_features, index=frame_idx, columns=columns)
                 df.to_parquet(tmpdir / f"{idx:05d}.parquet")
 
                 progbar.update(1)
@@ -394,9 +387,9 @@ class ExtractorFactory:
     ) -> DinoFeatureExtractor:
         """Create appropriate feature extractor based on model name."""
         if model_name.startswith("hf-hub:timm"):
-            return OpenCLIPFeatureExtractor(model, input_size=input_size, device=device)
+            return OpenCLIPFeatureExtractor(model, device=device)
         else:
-            return DinoFeatureExtractor(model, input_size=input_size, device=device)
+            return DinoFeatureExtractor(model, device=device)
 
 
 def create_video_from_frames(
@@ -474,15 +467,14 @@ class DinotoolProcessor:
         # Setup PCA
         pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
         features = extractor(batch["img"])
-        pca.fit(features)
+        pca.fit(features.flat().tensor)
         
         # Create frame data
         frame = data.FrameData(
             img=input_data.source,
-            features=extractor.reshape_features(features)[0],
-            pca=pca.transform(features, flattened=False)[0],
+            features=features,
+            pca=pca.transform(features.flat().tensor, flattened=False)[0],
             frame_idx=0,
-            flattened=False,
         )
         
         # Save visualization
@@ -513,7 +505,7 @@ class DinotoolProcessor:
         batch = next(iter(input_data.data))
         pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
         features = extractor(batch["img"])
-        pca.fit(features)
+        pca.fit(features.flat().tensor)
         
         # Setup output paths
         feature_out_name = None
@@ -611,17 +603,15 @@ class DinotoolProcessor:
             input_size = extractor.patch_size * np.array(feature_map_size)
             progbar.set_description(f"Processing {filename}. Input size: {input_size}")
 
-            extractor.set_input_size(input_size)
             pca = PCAModule(n_components=3, feature_map_size=feature_map_size)
             features = extractor(batch["img"])
-            pca.fit(features, verbose=False)
+            pca.fit(features.flat().tensor, verbose=False)
 
             frame = data.FrameData(
                 img=input_data.source.get_by_name(filename),
-                features=extractor.reshape_features(features)[0],
-                pca=pca.transform(features, flattened=False)[0],
+                features=features.full()[0],
+                pca=pca.transform(features.flat().tensor, flattened=False)[0],
                 frame_idx=0,
-                flattened=False,
             )
             
             # Save visualization

@@ -6,7 +6,7 @@ from typing import List, Tuple
 import warnings
 from torchvision import transforms
 
-from dinotool.data import calculate_dino_dimensions
+from dinotool.data import calculate_dino_dimensions, LocalFeatures
 
 
 def load_model(model_name: str = "dinov2_vits14_reg") -> nn.Module:
@@ -41,7 +41,7 @@ def load_model(model_name: str = "dinov2_vits14_reg") -> nn.Module:
 
 
 class OpenCLIPFeatureExtractor(nn.Module):
-    def __init__(self, model: nn.Module, input_size: Tuple[int, int] = None, device: str = "cuda"
+    def __init__(self, model: nn.Module, device: str = "cuda"
     ):
         """Feature extractor for OpenCLIP model.
         Args:
@@ -55,26 +55,7 @@ class OpenCLIPFeatureExtractor(nn.Module):
         self.device = device
 
         self.patch_size = model.patch_size
-        self.input_size = input_size
 
-        if input_size is not None:
-            dino_dims = calculate_dino_dimensions(
-                input_size, patch_size=self.patch_size
-            )
-            self.w_featmap = dino_dims["w_featmap"]
-            self.h_featmap = dino_dims["h_featmap"]
-
-    def set_input_size(self, input_size: Tuple[int, int]):
-        """Set the input size for the feature extractor.
-        Args:
-            input_size (Tuple[int, int]): input size (width, height).
-        """
-        self.input_size = input_size
-        dino_dims = calculate_dino_dimensions(
-            input_size, patch_size=self.patch_size
-        )
-        self.w_featmap = dino_dims["w_featmap"]
-        self.h_featmap = dino_dims["h_featmap"]
 
     def forward(self, batch: torch.Tensor, flattened=True, normalized=True, return_clstoken=False):
         if return_clstoken:
@@ -84,37 +65,25 @@ class OpenCLIPFeatureExtractor(nn.Module):
                 return features
 
         b, c, h, w = batch.shape
+        dims = calculate_dino_dimensions((w, h), self.patch_size)
+        h_featmap, w_featmap = dims["h_featmap"], dims["w_featmap"]
+
         with torch.no_grad():
             batch = batch.to(self.device)
-            features = self.model.forward_intermediates(batch)["image_intermediates"][0]
-        b, f, h, w = features.shape
-        if normalized:
-            features = nn.functional.normalize(
-                rearrange(features, "b f h w -> (b h w) f"), dim=1
-            )
-            features = rearrange(features, "(b h w) f -> b (h w) f", b=b, h=h, w=w)
+            feature_tensor = self.model.forward_intermediates(batch)["image_intermediates"][0]
 
-        if flattened:
-            return features
-        features = self.reshape_features(features)
+        reshaped_tensor = rearrange(
+            feature_tensor, "b f h w -> b h w f", h=h_featmap, w=w_featmap
+        )
+
+        features = LocalFeatures(reshaped_tensor, is_flattened=False, h=h_featmap, w=w_featmap).normalize()
         return features
 
-    def reshape_features(self, features: torch.Tensor):
-        """Reshape features to (b, h, w, f) format.
-        Args:
-            features (torch.Tensor): features to reshape.
-        Returns:
-            torch.Tensor: reshaped features.
-        """
-        if self.input_size is None:
-            raise ValueError("input_size must be set when reshaping features")
-        b, hw, f = features.shape
-        return features.reshape(b, self.h_featmap, self.w_featmap, f)
 
 
 class DinoFeatureExtractor(nn.Module):
     def __init__(
-        self, model: nn.Module, input_size: Tuple[int, int] = None, device: str = "cuda"
+        self, model: nn.Module, device: str = "cuda"
     ):
         """Feature extractor for DINO model.
         Args:
@@ -129,26 +98,6 @@ class DinoFeatureExtractor(nn.Module):
         self.device = device
 
         self.patch_size = model.patch_size
-        self.input_size = input_size
-
-        if input_size is not None:
-            dino_dims = calculate_dino_dimensions(
-                input_size, patch_size=self.patch_size
-            )
-            self.w_featmap = dino_dims["w_featmap"]
-            self.h_featmap = dino_dims["h_featmap"]
-
-    def set_input_size(self, input_size: Tuple[int, int]):
-        """Set the input size for the feature extractor.
-        Args:
-            input_size (Tuple[int, int]): input size (width, height).
-        """
-        self.input_size = input_size
-        dino_dims = calculate_dino_dimensions(
-            input_size, patch_size=self.patch_size
-        )
-        self.w_featmap = dino_dims["w_featmap"]
-        self.h_featmap = dino_dims["h_featmap"]
 
     def forward(self, batch: torch.Tensor, flattened=True, normalized=True, return_clstoken=False):
         if return_clstoken:
@@ -158,31 +107,14 @@ class DinoFeatureExtractor(nn.Module):
                 return features
 
         b, c, h, w = batch.shape
+        dims = calculate_dino_dimensions((w, h), self.patch_size)
+        h_featmap, w_featmap = dims["h_featmap"], dims["w_featmap"]
+
         with torch.no_grad():
             batch = batch.to(self.device)
-            features = self.model.forward_features(batch)["x_norm_patchtokens"]
-        b, hw, f = features.shape
-        if normalized:
-            features = nn.functional.normalize(
-                rearrange(features, "b hw f -> (b hw) f"), dim=1
-            )
-            features = features.reshape(b, hw, f)
-        if flattened:
-            return features
-        features = self.reshape_features(features)
+            feature_tensor = self.model.forward_features(batch)["x_norm_patchtokens"]
+        features = LocalFeatures(feature_tensor, is_flattened=True, h=h_featmap, w=w_featmap).normalize()
         return features
-
-    def reshape_features(self, features: torch.Tensor):
-        """Reshape features to (b, h, w, f) format.
-        Args:
-            features (torch.Tensor): features to reshape.
-        Returns:
-            torch.Tensor: reshaped features.
-        """
-        if self.input_size is None:
-            raise ValueError("input_size must be set when reshaping features")
-        b, hw, f = features.shape
-        return features.reshape(b, self.h_featmap, self.w_featmap, f)
 
 
 class PCAModule:

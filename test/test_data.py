@@ -135,3 +135,16 @@ def test_input_processor_image_file():
     assert isinstance(input_data.data, torch.Tensor)
     assert input_data.input_size == (496, 368)
     assert input_data.feature_map_size == (31, 23)
+
+def test_local_features():
+    tensor = torch.rand(4, 20, 30, 100)  # Simulated features for 10 frames
+    features = data.LocalFeatures(tensor)
+
+    for i in range(4):
+        torch.testing.assert_close(features[i].tensor, tensor[i].unsqueeze(0))
+    assert features.shape == (4, 20, 30, 100)
+    assert features.flat().shape == (4, 600, 100)
+    assert features.full().shape == (4, 20, 30, 100)
+    assert features.tensor.shape == (4, 20, 30, 100)
+    assert features.normalize().tensor[0,0,0,:].norm() == pytest.approx(1.0, rel=1e-5)
+    assert features.normalize().tensor[0,3,4,:].norm() == pytest.approx(1.0, rel=1e-5)
