@@ -135,6 +135,16 @@ def test_full_video_folder_features():
     assert len(ds.x) == 34
     assert len(ds.feature) == 384
 
+def test_full_video_folder_new_folder():
+    config = DinotoolConfig(
+        input="test/data/nasa_frames_small", output="test/outputs/testfolder/nasaout1.mp4", batch_size=4
+    )
+
+    processor = DinotoolProcessor(config)
+    processor.run()
+    assert os.path.exists("test/outputs/testfolder/nasaout1.mp4")
+
+
 
 def test_full_video_file_features_flat():
     config = DinotoolConfig(

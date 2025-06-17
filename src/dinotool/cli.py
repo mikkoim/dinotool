@@ -398,6 +398,9 @@ def create_video_from_frames(
     framerate: float = 30
 ) -> None:
     """Create video from frame images using ffmpeg."""
+    output_path = Path(output_path)
+    if not output_path.parent.exists():
+        output_path.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run([
         "ffmpeg", "-y",
         "-framerate", str(framerate),
@@ -405,7 +408,7 @@ def create_video_from_frames(
         "-i", f"{tmpdir}/*.jpg",
         "-c:v", "libx264",
         "-pix_fmt", "yuv420p",
-        output_path
+        str(output_path)
     ], check=True)
     
     print(f"Saved visualization to {output_path}")
