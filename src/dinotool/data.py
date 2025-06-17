@@ -3,7 +3,7 @@ from PIL import Image
 import torch
 from torch.utils.data import Dataset, DataLoader
 import torch.nn as nn
-from typing import Tuple, Dict, List, Optional, Union
+from typing import Tuple, Dict, List, Optional, Union, Literal
 import cv2
 from dataclasses import dataclass
 import numpy as np
@@ -105,8 +105,9 @@ class LocalFeatures:
 class FrameData:
     img: Image.Image
     features: LocalFeatures
-    frame_idx: int
     pca: Optional[np.ndarray] = None
+    frame_idx: Optional[int] = None
+    filename: Optional[str] = None
 
     def __post_init__(self):
         if not isinstance(self.features, LocalFeatures):
@@ -114,10 +115,20 @@ class FrameData:
         if not isinstance(self.img, Image.Image):
             raise TypeError("img must be an instance of PIL.Image.Image")
         
-        if not isinstance(self.frame_idx, int):
-            raise TypeError("frame_idx must be an integer")
+        # Ensure either frame_idx or filename is provided
+        if self.frame_idx is None and self.filename is None:
+            raise ValueError("Either frame_idx or filename must be provided.")
+        # Ensure only one of them is provided
+        if self.frame_idx is not None and self.filename is not None:
+            raise ValueError("Cannot provide both frame_idx and filename. Choose one.")
+        if self.frame_idx is not None and not isinstance(self.frame_idx, int):
+            raise TypeError("frame_idx must be an integer or None.")
+        if self.filename is not None and not isinstance(self.filename, str):
+            raise TypeError("filename must be a string or None.")
+
         if self.pca is not None and not isinstance(self.pca, np.ndarray):
-            raise TypeError("pca must be a numpy ndarray")
+            raise TypeError("pca must be a numpy ndarray or None")
+
         if not self.features.is_normalized:
             raise ValueError("Features must be normalized. Use features.normalize() to normalize them.")
         
@@ -605,7 +616,7 @@ class ImageDirectoryDataset(Dataset):
         return len(self.image_directory)
 
 
-def create_xarray_from_batch_frames(batch_frames: List[FrameData]) -> xr.DataArray:
+def create_xarray_from_batch_frames(batch_frames: List[FrameData], identifier: Literal['filename', 'frame_idx']) -> xr.DataArray:
     """
     Create xarray from batch frames.
     """
@@ -615,56 +626,47 @@ def create_xarray_from_batch_frames(batch_frames: List[FrameData]) -> xr.DataArr
         raise ValueError(f"Cannot create xarray from frames with different feature shapes: {set(feature_shapes)}")
     
     tensor = torch.cat([x.features.full().tensor for x in batch_frames], dim=0)
-    frame_idx = [x.frame_idx for x in batch_frames]
+    identifier_list = [getattr(x, identifier) for x in batch_frames]
     
     # Assuming the tensor has shape (batch, height, width, feature)
     batch, height, width, feature = tensor.shape
 
     coords = {
-        "frame_idx": frame_idx,
+        identifier: identifier_list,
         "y": np.arange(height),
         "x": np.arange(width),
         "feature": np.arange(feature),
     }
     data = xr.DataArray(
         tensor.cpu().numpy(),
-        dims=("frame_idx", "y", "x", "feature"),
+        dims=(identifier, "y", "x", "feature"),
         coords=coords,
     )
     return data
 
 
-def create_dataframe_from_batch_frames(batch_frames: List[FrameData]) -> pd.DataFrame:
+def create_dataframe_from_batch_frames(batch_frames: List[FrameData], identifier: Literal['filename', 'frame_idx']) -> pd.DataFrame:
     """
-    Create a DataFrame from batch frames, handling varying sizes.
+    Create a DataFrame from batch frames.
     """
-    # Check if all frames have the same feature dimensions
-    feature_shapes = [frame.features.shape for frame in batch_frames]
-    if len(set(feature_shapes)) > 1:
-        # Handle varying sizes by processing each frame separately
-        dfs = []
-        for frame in batch_frames:
-            df = create_dataframe_from_single_frame(frame)
-            dfs.append(df)
-        return pd.concat(dfs, axis=0)
-    
-    # All frames have the same shape - use original logic
-    tensor = torch.cat([x.features.tensor for x in batch_frames], dim=0)
-    frame_idx_set = [x.frame_idx for x in batch_frames]
 
-    n_patches = tensor.shape[1] * tensor.shape[2]
+    tensor = torch.cat([x.features.flat().tensor for x in batch_frames], dim=0).cpu().numpy()
+    identifier_list = [getattr(x, identifier) for x in batch_frames]
 
-    features = rearrange(tensor, "b h w f -> (b h w) f").cpu().numpy()
+    features = rearrange(tensor, "b hw f -> (b hw) f")
 
-    frame_idx = []
+    n_patches = batch_frames[0].features.flat().shape[1]
+
+    identifier_idx= []
     patch_idx = []
-    for idx in frame_idx_set:
-        frame_idx.extend([int(idx)] * n_patches)
+
+    for frame_identifier in identifier_list:
+        identifier_idx.extend([frame_identifier] * n_patches)
         patch_idx.extend(list(range(n_patches)))
 
     # patch_idx
     index = pd.MultiIndex.from_tuples(
-        list(zip(frame_idx, patch_idx)), names=["frame_idx", "patch_idx"]
+        list(zip(identifier_idx, patch_idx)), names=[identifier, "patch_idx"]
     )
 
     columns = [f"feature_{i}" for i in range(features.shape[1])]

@@ -69,3 +69,58 @@ def test_imagedir_features_frame():
     assert df.index.names == ['filename']
     assert set(df.index) == set([x.name for x in Path("test/data/imagefolder").glob("*")])
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+
+# Resized and batch processed
+def test_batched_imagedir_features_full():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1_b",
+        save_features="full",
+        batch_size=2,
+        input_size=(480, 270),
+        no_vis=True
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    ds = xr.open_dataarray("test/outputs/if1_b.zarr")
+
+    assert len(ds.filename) == 4
+    assert len(ds.y) == 19
+    assert len(ds.x) == 34
+    assert len(ds.feature) == 384
+
+def test_batched_imagedir_features_flat():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1_flat_b",
+        save_features="flat",
+        batch_size=2,
+        input_size=(480, 270),
+        no_vis=True
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    df = pd.read_parquet("test/outputs/if1_flat_b.parquet")
+    assert df.shape == (2584, 384)
+    assert df.index.names == ['filename', 'patch_idx']
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+
+# def test_batched_imagedir_features_frame():
+#     config = DinotoolConfig(
+#         input="test/data/imagefolder",
+#         output="test/outputs/if1_frame_b",
+#         save_features="frame",
+#         batch_size=2,
+#         input_size=(480, 270),
+#         no_vis=True
+#     )
+#     processor = DinotoolProcessor(config)
+#     processor.run()
+
+#     df = pd.read_parquet("test/outputs/if1_frame_b.parquet")
+#     assert df.shape == (4, 384)
+#     assert df.index.names == ['filename']
+#     assert set(df.index) == set([x.name for x in Path("test/data/imagefolder").glob("*")])
+#     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]

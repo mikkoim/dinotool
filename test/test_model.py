@@ -133,7 +133,7 @@ def test_feature_saving():
     i = 0
     for batch in input_data.data:
         batch_frames = batch_handler(batch)
-        f_data = create_xarray_from_batch_frames(batch_frames)
+        f_data = create_xarray_from_batch_frames(batch_frames, identifier="frame_idx")
         i += 1
         if i == 2:
             break

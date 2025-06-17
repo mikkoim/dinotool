@@ -107,11 +107,18 @@ class ArgumentValidator:
                 "If --no-vis is set, you must also set --save-features to save features."
             )
     @staticmethod
-    def validate_input_type_and_vis_and_batch(input_type: str, no_vis: bool, input_path:str, batch_size: int) -> None:
+    def validate_input_type_and_vis_and_batch(input_type: str, input_size, no_vis: bool, input_path:str, batch_size: int) -> None:
         if input_type == 'image_directory' and batch_size > 1:
-            raise argparse.ArgumentTypeError(
-                "Batch size > 1 is not (currently) supported for image directories. "
-                "Do not set --batch-size or set it to 1."
+            if not no_vis:
+                raise argparse.ArgumentTypeError(
+                    "Visualization of image directories with batch size > 1 is not supported. "
+                    "Set --no-vis or set --batch-size to 1."
+                )
+            if input_size is None:
+                raise argparse.ArgumentTypeError(
+                    "Batch size > 1 is not (currently) supported for image directories. "
+                    "with varying input sizes. "
+                    "Do not set --batch-size or set it to 1, or set --input-size to a fixed size."
             )
 
 
@@ -211,7 +218,7 @@ class ArgumentParser:
             ArgumentValidator.validate_output_path(args.output, args.force)
             ArgumentValidator.validate_output_extension(input_type, args.output, args.no_vis)
             ArgumentValidator.validate_vis_and_features(args.no_vis, args.save_features)
-            ArgumentValidator.validate_input_type_and_vis_and_batch(input_type, args.no_vis, args.input, args.batch_size)
+            ArgumentValidator.validate_input_type_and_vis_and_batch(input_type, args.input_size, args.no_vis, args.input, args.batch_size)
             
             if args.save_features:
                 ArgumentValidator.validate_feature_files(args.output, args.save_features)
@@ -246,12 +253,18 @@ class FeatureSaver:
         method: Literal["full", "flat"],
         output: str
     ) -> None:
+
         """Save features from a batch of frames to a file."""
+        if batch_frames[0].filename is not None:
+            identifier = 'filename'
+        else:
+            identifier = 'frame_idx'
+        
         if method == "full":
-            f_data = data.create_xarray_from_batch_frames(batch_frames)
+            f_data = data.create_xarray_from_batch_frames(batch_frames, identifier=identifier)
             f_data.to_netcdf(f"{output}.nc")
         elif method == "flat":
-            f_data = data.create_dataframe_from_batch_frames(batch_frames)
+            f_data = data.create_dataframe_from_batch_frames(batch_frames, identifier=identifier)
             f_data.to_parquet(f"{output}.parquet")
     
     @staticmethod
@@ -461,6 +474,9 @@ class DinotoolProcessor:
             self._process_video(input_data, extractor)
         elif input_data.input_type  == "single_image":
             self._process_image(input_data, extractor)
+        elif input_data.input_type == "image_directory" and self.config.input_size is not None:
+            # process image directory with specified input size
+            self._process_video(input_data, extractor)
         elif input_data.input_type == "image_directory":
             self._process_image_directory(input_data, extractor)
         else:
@@ -570,8 +586,8 @@ class DinotoolProcessor:
         feature_out_name: Optional[Path]
     ) -> None:
         """Process video batches."""
-        
         try:
+            idx = 0
             for batch in input_data.data:
                 batch_frames = batch_handler(batch)
                 
@@ -587,12 +603,14 @@ class DinotoolProcessor:
                 
                 # Save features
                 if self.config.save_features:
-                    output_path = f"{tmpdir}/{batch_frames[0].frame_idx:05d}"
+
+                    output_path = f"{tmpdir}/{idx:05d}"
                     FeatureSaver.save_batch_features(
                         batch_frames,
                         method=self.config.save_features,
                         output=output_path
                     )
+                idx += 1
                 
         except KeyboardInterrupt:
             print("Keyboard interrupt detected. Cleaning up...")

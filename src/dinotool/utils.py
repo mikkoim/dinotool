@@ -1,5 +1,5 @@
 from dinotool.model import DinoFeatureExtractor, PCAModule
-from dinotool.data import Video, FrameData, LocalFeatures
+from dinotool.data import Video, FrameData, LocalFeatures, ImageDirectory
 from PIL import Image
 import numpy as np
 from typing import Union, List
@@ -7,10 +7,10 @@ from typing import Union, List
 
 class BatchHandler:
     def __init__(
-        self, video: Video, feature_extractor: DinoFeatureExtractor, pca: Union[PCAModule, None] = None,
+        self, source: Union[Video, ImageDirectory], feature_extractor: DinoFeatureExtractor, pca: Union[PCAModule, None] = None,
         progress_bar=None
     ):
-        self.video = video
+        self.source = source
         self.feature_extractor = feature_extractor
         self.pca = pca
         self.progress_bar = progress_bar
@@ -21,8 +21,23 @@ class BatchHandler:
             pca_features = self.pca.transform(features.flat().tensor, flattened=False)
 
         framedata_list = []
-        for batch_idx, frame_idx in enumerate(batch["frame_idx"].numpy()):
-            img_frame = self.video[frame_idx]
+        if "filename" in batch:
+            identifiers = batch["filename"]
+            identifier_type = "filename"
+        elif "frame_idx" in batch:
+            identifiers = batch["frame_idx"].numpy()
+            identifier_type = "frame_idx"
+        else:
+            raise ValueError("Batch must contain either 'filename' or 'frame_idx'.")
+
+        for batch_idx, identifier in enumerate(identifiers):
+            if identifier_type == "filename":
+                img_source_data = self.source.get_by_name(identifier)
+                frame_data_kwargs = {'filename': identifier}
+            else:
+                img_source_data = self.source[identifier]
+                frame_data_kwargs = {'frame_idx': int(identifier)}
+
             feature_frame = features[batch_idx].full()
 
             if self.pca is not None:
@@ -31,10 +46,10 @@ class BatchHandler:
                 pca_frame = None
 
             framedata = FrameData(
-                img=img_frame,
+                img=img_source_data,
                 features=feature_frame,
                 pca=pca_frame,
-                frame_idx=int(frame_idx),
+                **frame_data_kwargs
             )
 
             framedata_list.append(framedata)
