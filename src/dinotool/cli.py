@@ -466,17 +466,21 @@ class DinotoolProcessor:
     def _process_image(self, input_data: data.InputData, extractor: DinoFeatureExtractor) -> None:
         """Process a single image."""
         batch = {"img": input_data.data}
+        features = extractor(batch["img"])
         
         # Setup PCA
-        pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
-        features = extractor(batch["img"])
-        pca.fit(features.flat().tensor)
+        if not self.config.no_vis:
+            pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
+            pca.fit(features.flat().tensor)
+            pca_array = pca.transform(features.flat().tensor, flattened=False)[0]
+        else:
+            pca_array = None
         
         # Create frame data
         frame = data.FrameData(
             img=input_data.source,
             features=features,
-            pca=pca.transform(features.flat().tensor, flattened=False)[0],
+            pca=pca_array, # PCA features if visualization is enabled
             frame_idx=0,
         )
         
@@ -505,10 +509,13 @@ class DinotoolProcessor:
     def _process_video(self, input_data: data.InputData, extractor: DinoFeatureExtractor) -> None:
         """Process a video."""
         # Setup PCA
-        batch = next(iter(input_data.data))
-        pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
-        features = extractor(batch["img"])
-        pca.fit(features.flat().tensor)
+        if not self.config.no_vis:
+            first_batch = next(iter(input_data.data))
+            pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
+            first_features = extractor(first_batch["img"])
+            pca.fit(first_features.flat().tensor)
+        else:
+            pca = None
         
         # Setup output paths
         feature_out_name = None

@@ -145,7 +145,6 @@ def test_full_video_folder_new_folder():
     assert os.path.exists("test/outputs/testfolder/nasaout1.mp4")
 
 
-
 def test_full_video_file_features_flat():
     config = DinotoolConfig(
         input="test/data/nasa.mp4",
@@ -188,6 +187,21 @@ def test_full_video_folder_features_flat():
 
     assert os.path.exists("test/outputs/nasaout7.parquet")
     df = pd.read_parquet("test/outputs/nasaout7.parquet")
+    assert df.shape == (5814, 384)
+
+def test_full_video_folder_features_flat_no_vis():
+    config = DinotoolConfig(
+        input="test/data/nasa_frames_small",
+        output="test/outputs/nasaout7_novis.mp4",
+        batch_size=4,
+        save_features="flat",
+        no_vis = True,
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    assert os.path.exists("test/outputs/nasaout7_novis.parquet")
+    df = pd.read_parquet("test/outputs/nasaout7_novis.parquet")
     assert df.shape == (5814, 384)
 
 def test_full_imagedir():

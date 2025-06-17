@@ -105,19 +105,19 @@ class LocalFeatures:
 class FrameData:
     img: Image.Image
     features: LocalFeatures
-    pca: np.ndarray
     frame_idx: int
+    pca: Optional[np.ndarray] = None
 
     def __post_init__(self):
         if not isinstance(self.features, LocalFeatures):
             raise TypeError("features must be an instance of LocalFeatures")
         if not isinstance(self.img, Image.Image):
             raise TypeError("img must be an instance of PIL.Image.Image")
-        if not isinstance(self.pca, np.ndarray):
-            raise TypeError("pca must be a numpy ndarray")
+        
         if not isinstance(self.frame_idx, int):
             raise TypeError("frame_idx must be an integer")
-
+        if self.pca is not None and not isinstance(self.pca, np.ndarray):
+            raise TypeError("pca must be a numpy ndarray")
         if not self.features.is_normalized:
             raise ValueError("Features must be normalized. Use features.normalize() to normalize them.")
         
