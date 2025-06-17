@@ -331,10 +331,13 @@ class FrameLevelProcessor:
             for batch in data:
                 filename = batch['filename'][0]
                 filename_stem = Path(filename).stem
+
+                global_features = self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
                 
                 columns = [f"feature_{i}" for i in range(global_features.shape[1])]
                 # Create DataFrame for current image's features, using filename_stem as index
-                df = pd.DataFrame(global_features, index=[filename_stem], columns=columns)
+                df = pd.DataFrame(global_features, index=[filename], columns=columns)
+                df.index.name = 'filename'
                 all_features_dfs.append(df)
                 
                 progbar.set_description(f"Processed {filename_stem}")
@@ -613,9 +616,13 @@ class DinotoolProcessor:
             input_size = extractor.patch_size * np.array(feature_map_size)
             progbar.set_description(f"Processing {filename}. Input size: {input_size}")
 
-            pca = PCAModule(n_components=3, feature_map_size=feature_map_size)
             features = extractor(batch["img"])
-            pca.fit(features.flat().tensor, verbose=False)
+            if not self.config.no_vis:
+                pca = PCAModule(n_components=3, feature_map_size=feature_map_size)
+                pca.fit(features.flat().tensor, verbose=False)
+            else:
+                pca = None
+                features = extractor(batch["img"], return_clstoken=True)
 
             frame = data.FrameData(
                 img=input_data.source.get_by_name(filename),

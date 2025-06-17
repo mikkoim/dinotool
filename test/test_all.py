@@ -63,6 +63,7 @@ def test_full_image_features_flat():
     df = pd.read_parquet("test/outputs/out.parquet")
     assert df.shape == (910, 384)
     assert df.index.names == ['frame_idx', 'patch_idx']
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
 
 def test_full_image_features_frame():
     config = DinotoolConfig(
@@ -157,7 +158,10 @@ def test_full_video_file_features_flat():
 
     assert os.path.exists("test/outputs/nasaout5.parquet")
     df = pd.read_parquet("test/outputs/nasaout5.parquet")
+    breakpoint()
     assert df.shape == (58140, 384)
+    assert df.index.names == ['frame_idx', 'patch_idx']
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
 
 
 def test_full_video_file_features_frame():
@@ -173,6 +177,7 @@ def test_full_video_file_features_frame():
     assert os.path.exists("test/outputs/nasaout6.parquet")
     df = pd.read_parquet("test/outputs/nasaout6.parquet")
     assert df.shape == (90, 384)
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
 
 
 def test_full_video_folder_features_flat():
@@ -188,6 +193,8 @@ def test_full_video_folder_features_flat():
     assert os.path.exists("test/outputs/nasaout7.parquet")
     df = pd.read_parquet("test/outputs/nasaout7.parquet")
     assert df.shape == (5814, 384)
+    assert df.index.names == ['frame_idx', 'patch_idx']
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
 
 def test_full_video_folder_features_flat_no_vis():
     config = DinotoolConfig(
@@ -203,6 +210,8 @@ def test_full_video_folder_features_flat_no_vis():
     assert os.path.exists("test/outputs/nasaout7_novis.parquet")
     df = pd.read_parquet("test/outputs/nasaout7_novis.parquet")
     assert df.shape == (5814, 384)
+    assert df.index.names == ['frame_idx', 'patch_idx']
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
 
 def test_full_imagedir():
     config = DinotoolConfig(
@@ -228,6 +237,7 @@ def test_full_imagedir_features_full():
     output_dir = Path("test/outputs/if1")
     assert output_dir.exists()
     assert len(list(output_dir.glob("*.jpg"))) == 4
+    assert len(list(output_dir.glob("*"))) == 8
 
     ds = xr.open_dataarray("test/outputs/if1/bird1.nc")
     assert len(ds.frame_idx) == 1
@@ -238,8 +248,33 @@ def test_full_imagedir_features_full():
 def test_full_imagedir_features_flat():
     config = DinotoolConfig(
         input="test/data/imagefolder",
-        output="test/outputs/if1",
+        output="test/outputs/if1_flat",
         save_features="flat"
     )
     processor = DinotoolProcessor(config)
     processor.run()
+
+    output_dir = Path("test/outputs/if1_flat")
+    assert output_dir.exists()
+    assert len(list(output_dir.glob("*.jpg"))) == 4
+    assert len(list(output_dir.glob("*"))) == 8
+
+    df = pd.read_parquet("test/outputs/if1_flat/bird1.parquet")
+    assert df.shape == (4096, 384)
+    assert df.index.names == ['frame_idx', 'patch_idx']
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+
+def test_full_imagedir_features_frame():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1_frame",
+        save_features="frame"
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    df = pd.read_parquet("test/outputs/if1_frame.parquet")
+    assert df.shape == (4, 384)
+    assert df.index.names == ['filename']
+    assert set(df.index) == set([x.name for x in Path("test/data/imagefolder").glob("*")])
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
