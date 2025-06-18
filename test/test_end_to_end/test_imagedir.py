@@ -107,20 +107,20 @@ def test_batched_imagedir_features_flat():
     assert df.index.names == ['filename', 'patch_idx']
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
 
-# def test_batched_imagedir_features_frame():
-#     config = DinotoolConfig(
-#         input="test/data/imagefolder",
-#         output="test/outputs/if1_frame_b",
-#         save_features="frame",
-#         batch_size=2,
-#         input_size=(480, 270),
-#         no_vis=True
-#     )
-#     processor = DinotoolProcessor(config)
-#     processor.run()
+def test_batched_imagedir_features_frame():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1_frame_b",
+        save_features="frame",
+        batch_size=2,
+        input_size=(480, 270),
+        no_vis=True
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
 
-#     df = pd.read_parquet("test/outputs/if1_frame_b.parquet")
-#     assert df.shape == (4, 384)
-#     assert df.index.names == ['filename']
-#     assert set(df.index) == set([x.name for x in Path("test/data/imagefolder").glob("*")])
-#     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    df = pd.read_parquet("test/outputs/if1_frame_b.parquet")
+    assert df.shape == (4, 384)
+    assert df.index.names == ['filename']
+    assert set(df.index) == set([x.name for x in Path("test/data/imagefolder").glob("*")])
+    assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]

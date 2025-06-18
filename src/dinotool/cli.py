@@ -342,29 +342,33 @@ class FrameLevelProcessor:
             all_features_dfs = []
             progbar = tqdm(total=len(input_data.source))
             for batch in data:
-                filename = batch['filename'][0]
-                filename_stem = Path(filename).stem
+
+                filename = batch['filename']
 
                 global_features = self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
                 
                 columns = [f"feature_{i}" for i in range(global_features.shape[1])]
                 # Create DataFrame for current image's features, using filename_stem as index
                 df = pd.DataFrame(global_features, index=[filename], columns=columns)
-                df.index.name = 'filename'
+                
+                df.index.set_names(['filename'], inplace=True)
                 all_features_dfs.append(df)
                 
-                progbar.set_description(f"Processed {filename_stem}")
-                progbar.update(1)
+                progbar.set_description(f"Processed {filename}")
+                progbar.update(len(batch["img"]))
             progbar.close()
 
             # Concatenate all DataFrames and save to a single parquet file
             if all_features_dfs:
                 combined_df = pd.concat(all_features_dfs, axis=0)
+
                 final_output_path = Path(output_path_base).with_suffix('.parquet')
                 combined_df.to_parquet(final_output_path)
                 print(f"Saved combined frame features to {final_output_path}")
             else:
                 print("No images found or processed in the directory to save frame features.")
+        else:
+            raise ValueError(f"Unsupported input type for frame-level features: {input_type}")
 
     def _extract_frame_features_from_iterable(self, data_iterable: object, tmpdir: Path) -> None:
         """Extract features from an iterable (e.g., video loader) into temporary files."""
