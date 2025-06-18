@@ -7,7 +7,8 @@
 It supports both **global (frame-level)** and **local (patch-level)** features, and can optionally visualize feature maps using PCA.
 
 ```bash
-uvx dinotool test.jpg -o out.jpg
+pip install dinotool
+dinotool test.jpg -o out.jpg
 ```
 
 ## ✨ Features
@@ -113,9 +114,9 @@ dinotool test.jpg -o out.jpg
 
 If you have `uv` installed, you can simply run DINOtool with
 ```bash
-uvx dinotool test.jpg -o out.jpg
+uv run --with dinotool dinotool test.jpg -o out.jpg
 ```
-You still have to have `ffmpeg` installed.
+You still have to have `ffmpeg` installed. `uvx` does not work on linux due to `xformers` dependencies.
 
 ### 🐍 Conda Environment (Recommended)
 If you want an isolated setup, especially useful for managing `ffmpeg` and dependencies:
