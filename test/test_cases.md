@@ -8,7 +8,7 @@ uv run dinotool test/data/bird1.jpg -o out.jpg
 uv run dinotool test/data/nasa.mp4 -o nasa.mp4 --batch-size 4
 # -> Outputs nasa.mp4
 
-# "I want to use SigLIP2 instead"
+# "I want see how SigLIP2 local features look like"
 uv run dinotool test/data/nasa.mp4 -o nasa-siglip2.mp4 --batch-size 4 --model-name siglip2
 # -> Outputs nasa-siglip2.mp4
 # CLIP/SigLIP inputs are resized based on the preprocessing pipeline of the model.
@@ -23,10 +23,17 @@ uv run dinotool test/data/bird1.jpg -o bird_features --save-features 'flat' --no
 # I have a lot of images that are different sizes, and I want their local features in a format that preserves the locality
 # I also want to save the PCA outputs for visual inspection
 uv run dinotool test/data/imagefolder -o my_imagefolder --save-features 'full'
+# -> Produces folder 'my_imagefolder', which contains visualizations and NetCDF files containing the local features
 
-# Want to get global feature vectors with SigLIP2 - no need for visualization
-uv run dinotool test/data/imagefolder -o my_imagefolder --save-features 'frame' --model-name siglip2
+# I want also to get global feature vectors with SigLIP2 - no need for visualization
+uv run dinotool test/data/imagefolder -o siglip2feats --save-features 'frame' --model-name siglip2
+# -> Produces a file siglip2feats.parquet, with index determining the filename
 
 # I have a folder of images but they can be all resized to the same size for faster batch processing
-uv run dinotool test/data/imagefolder -o my_imagefolder --save-features 'full' --input-size 960 540 --batch-size 4 --no-vis
+uv run dinotool test/data/drone_images -o drone --save-features 'full' --input-size 512 512 --batch-size 4 --no-vis
+# -> Produces drone.zarr with full local features with structure
+# with --save features 'flat' this would produce a partitioned parquet directory
+
+# I want also to get global feature vectors with SigLIP2 - no need for visualization
+uv run dinotool test/data/imagefolder -o siglip2feats --save-features 'frame' --model-name siglip2
 ```
