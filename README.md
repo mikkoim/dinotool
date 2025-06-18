@@ -60,6 +60,10 @@ produces outputs (DINOv2 / SigLIP2):
 
 ![DINO_SigLIP2](docs/resources/combined_image.jpg)
 
+### Global features for image folders:
+
+Processing image directories and extracting global or local features for each image is easy with DINOtool:
+
 ```bash
 dinotool image_folder/ -o global_features --save-features 'frame'
 ```
@@ -74,6 +78,8 @@ produces a `global_features.parquet` file with global features:
 | `car_004.jpg`  | 0.301      | -0.202     | 0.144      | ... | -0.019       |
 
 Similar files can be also produced for local patch features, for videos etc.
+
+### More examples:
 
 More example commands can be found in [test/test_cases.md](test/test_cases.md)
 
@@ -230,6 +236,8 @@ See the [DINOv2 github repo](https://github.com/facebookresearch/dinov2) for mor
 
 DINOtool now supports also ViT models that follow the OpenCLIP/timm model API for feature extraction. These models are for example the [SigLIP2 models in Huggingface hub](https://huggingface.co/collections/timm/siglip-2-67b8e72ba08b09dd97aecaf9). Additionally, [other models](https://huggingface.co/models?library=open_clip&sort=trending&search=timm%2F) in the Hub should also work, but have not been fully tested. These include SigLIP and CLIP models.
 
+The OpenCLIP/timm model name has to be passed in the format `hf-hub:timm/<model name>`.
+
 **Shortcuts**:
 There are some predefined shortcuts for popular models. These can be passed to `--model-name`
 ```bash
@@ -273,7 +281,7 @@ For batch processing image folders, `--input-size` must be set. Visualization is
 ## 🧑‍💻 Usage reference
 
 ```text
-🦕 DINOtool: Extract and visualize DINO features from images and videos.
+🦕 DINOtool: Extract and visualize ViT features from images and videos.
 
 Usage:
   dinotool input_path -o output_path [options]
@@ -283,11 +291,11 @@ Arguments:
   -o, --output            Path for the output (required).
 
 Options:
-  --save-features MODE    Save extracted features: full, flat, or frame
-  --model-name MODEL      Model to use (default: dinov2_vits14_reg)
+  -s, --save-features MODE    Save extracted features: full, flat, or frame
+  -m, --model-name MODEL      Model to use (default: dinov2_vits14_reg)
   --input-size W H        Resize input before processing. Must be set for batch
                           processing of image folders
-  --batch-size N          Batch size for faster processing
+  -b, --batch-size N          Batch size for faster processing
   --only-pca              Only visualize PCA features.
   --no-vis                Only output features with no visualization.
                           --save features must be set.

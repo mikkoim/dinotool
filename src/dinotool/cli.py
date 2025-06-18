@@ -131,7 +131,7 @@ class ArgumentParser:
     def _create_parser(self) -> argparse.ArgumentParser:
         """Create the argument parser."""
         parser = argparse.ArgumentParser(
-            description="🦕 DINOtool: Extract and visualize DINO features from images and videos."
+            description="🦕 DINOtool: Extract and visualize ViT features from images and videos."
         )
         
         # Required arguments
@@ -144,27 +144,29 @@ class ArgumentParser:
             "--output", "-o",
             type=str,
             required=True,
-            help="Path to output visualization (image or video)."
+            help="Path to output file or directory where features and visualizations will be saved."
         )
         
         # Model arguments
         parser.add_argument(
             "--model-name",
+            "-m",
             type=str,
             default="dinov2_vits14_reg",
-            help="DINO model to use (default: dinov2_vits14_reg)."
+            help="Model to use (default: dinov2_vits14_reg). OpenCLIP/timm models can be used with 'hf-hub:timm/<model_name>' format."
         )
         parser.add_argument(
             "--input-size",
             type=int,
             nargs=2,
             default=None,
-            help="Resizes input to this size before passing it to the model."
+            help="Resizes input to this size before passing it to the model. Mandatory for image directories with batch size > 1. "
         )
         
         # Processing arguments
         parser.add_argument(
             "--batch-size",
+            "-b",
             type=int,
             default=1,
             help="Batch size for processing (default: 1)."
@@ -178,10 +180,12 @@ class ArgumentParser:
         )
         parser.add_argument(
             "--save-features",
+            "-s",
             type=str,
             default=None,
             choices=["full", "flat", "frame"],
             help="Save features to file (netCDF for images, zarr for videos)."
+            " 'full' saves local features with spatial information, 'flat' saves local flattened features, 'frame' saves global frame-level features."
         )
         
         # Output arguments
