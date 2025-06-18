@@ -14,7 +14,7 @@ def test_feature_extractor_basic():
     model = d["model"]
     batch = d["batch"]
 
-    extractor = DinoFeatureExtractor(model, device='cuda')
+    extractor = DinoFeatureExtractor(model, device="cuda")
 
     out = extractor(batch["img"]).tensor
     assert out.shape == torch.Size([1, 256, 384])
@@ -54,7 +54,7 @@ def test_pca_module():
     model = d["model"]
     batch = d["batch"]
 
-    extractor = DinoFeatureExtractor(model, device='cuda')
+    extractor = DinoFeatureExtractor(model, device="cuda")
     features = extractor(batch["img"])
 
     pca = PCAModule(n_components=3)
@@ -73,7 +73,7 @@ def test_pca_module_nonflat():
     model = d["model"]
     batch = d["batch"]
 
-    extractor = DinoFeatureExtractor(model, device='cuda')
+    extractor = DinoFeatureExtractor(model, device="cuda")
     features = extractor(batch["img"])
 
     pca = PCAModule(n_components=3, feature_map_size=(16, 16))
@@ -91,12 +91,14 @@ def test_batch_handler():
 
     input_processor = InputProcessor(
         "dinov2_vits14_reg",
-        "test/data/nasa.mp4", patch_size=model.patch_size, batch_size=1
+        "test/data/nasa.mp4",
+        patch_size=model.patch_size,
+        batch_size=1,
     )
     input_data = input_processor.process()
     batch = next(iter(input_data.data))
 
-    extractor = DinoFeatureExtractor(model, device='cuda')
+    extractor = DinoFeatureExtractor(model, device="cuda")
     features = extractor(batch["img"])
 
     pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
@@ -119,12 +121,14 @@ def test_feature_saving():
 
     input_processor = InputProcessor(
         "dinov2_vits14_reg",
-        "test/data/nasa.mp4", patch_size=model.patch_size, batch_size=2
+        "test/data/nasa.mp4",
+        patch_size=model.patch_size,
+        batch_size=2,
     )
     input_data = input_processor.process()
     batch = next(iter(input_data.data))
 
-    extractor = DinoFeatureExtractor(model, device='cuda')
+    extractor = DinoFeatureExtractor(model, device="cuda")
     features = extractor(batch["img"])
     pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
     pca.fit(features.flat().tensor)

@@ -7,8 +7,11 @@ from typing import Union, List
 
 class BatchHandler:
     def __init__(
-        self, source: Union[Video, ImageDirectory], feature_extractor: DinoFeatureExtractor, pca: Union[PCAModule, None] = None,
-        progress_bar=None
+        self,
+        source: Union[Video, ImageDirectory],
+        feature_extractor: DinoFeatureExtractor,
+        pca: Union[PCAModule, None] = None,
+        progress_bar=None,
     ):
         self.source = source
         self.feature_extractor = feature_extractor
@@ -33,10 +36,10 @@ class BatchHandler:
         for batch_idx, identifier in enumerate(identifiers):
             if identifier_type == "filename":
                 img_source_data = self.source.get_by_name(identifier)
-                frame_data_kwargs = {'filename': identifier}
+                frame_data_kwargs = {"filename": identifier}
             else:
                 img_source_data = self.source[identifier]
-                frame_data_kwargs = {'frame_idx': int(identifier)}
+                frame_data_kwargs = {"frame_idx": int(identifier)}
 
             feature_frame = features[batch_idx].full()
 
@@ -49,7 +52,7 @@ class BatchHandler:
                 img=img_source_data,
                 features=feature_frame,
                 pca=pca_frame,
-                **frame_data_kwargs
+                **frame_data_kwargs,
             )
 
             framedata_list.append(framedata)

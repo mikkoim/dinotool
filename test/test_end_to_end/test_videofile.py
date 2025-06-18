@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import xarray as xr
 
+
 def test_videofile_only():
     config = DinotoolConfig(
         input="test/data/nasa.mp4", output="test/outputs/nasaout1.mp4", batch_size=4
@@ -13,6 +14,7 @@ def test_videofile_only():
     processor = DinotoolProcessor(config)
     processor.run()
     assert os.path.exists("test/outputs/nasaout1.mp4")
+
 
 def test_videofile_features_full():
     config = DinotoolConfig(
@@ -30,7 +32,10 @@ def test_videofile_features_full():
     assert len(ds.y) == 19
     assert len(ds.x) == 34
     assert len(ds.feature) == 384
-    assert np.allclose(np.linalg.norm(ds.sel(x=0,y=0,frame_idx=0).values), 1.0, atol=1e-5)
+    assert np.allclose(
+        np.linalg.norm(ds.sel(x=0, y=0, frame_idx=0).values), 1.0, atol=1e-5
+    )
+
 
 def test_videofile_features_flat():
     config = DinotoolConfig(
@@ -46,7 +51,7 @@ def test_videofile_features_flat():
     df = pd.read_parquet("test/outputs/nasaout5.parquet")
 
     assert df.shape == (58140, 384)
-    assert df.index.names == ['frame_idx', 'patch_idx']
+    assert df.index.names == ["frame_idx", "patch_idx"]
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
     assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
 

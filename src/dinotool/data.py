@@ -16,8 +16,17 @@ from collections import defaultdict
 import torch
 from einops import rearrange
 
+
 class LocalFeatures:
-    def __init__(self, tensor: torch.Tensor, *, is_flattened=False, is_normalized=False, h=None, w=None):
+    def __init__(
+        self,
+        tensor: torch.Tensor,
+        *,
+        is_flattened=False,
+        is_normalized=False,
+        h=None,
+        w=None,
+    ):
         """
         tensor: torch.Tensor of shape (b, h, w, f) or (b, h*w, f)
         """
@@ -41,14 +50,22 @@ class LocalFeatures:
         if self.is_flattened:
             return self
         flat_tensor = rearrange(self.tensor, "b h w f -> b (h w) f")
-        return LocalFeatures(flat_tensor, is_flattened=True, is_normalized=self.is_normalized, h=self.h, w=self.w)
+        return LocalFeatures(
+            flat_tensor,
+            is_flattened=True,
+            is_normalized=self.is_normalized,
+            h=self.h,
+            w=self.w,
+        )
 
     def full(self):
         """Return a new LocalFeatures instance with (b, h, w, f) shape."""
         if not self.is_flattened:
             return self
         full_tensor = rearrange(self.tensor, "b (h w) f -> b h w f", h=self.h, w=self.w)
-        return LocalFeatures(full_tensor, is_flattened=False, is_normalized=self.is_normalized)
+        return LocalFeatures(
+            full_tensor, is_flattened=False, is_normalized=self.is_normalized
+        )
 
     def normalize(self, eps=1e-8):
         """L2-normalize along feature dimension."""
@@ -101,6 +118,7 @@ class LocalFeatures:
     def shape(self):
         return self.tensor.shape
 
+
 @dataclass
 class FrameData:
     img: Image.Image
@@ -114,7 +132,7 @@ class FrameData:
             raise TypeError("features must be an instance of LocalFeatures")
         if not isinstance(self.img, Image.Image):
             raise TypeError("img must be an instance of PIL.Image.Image")
-        
+
         # Ensure either frame_idx or filename is provided
         if self.frame_idx is None and self.filename is None:
             raise ValueError("Either frame_idx or filename must be provided.")
@@ -130,15 +148,22 @@ class FrameData:
             raise TypeError("pca must be a numpy ndarray or None")
 
         if not self.features.is_normalized:
-            raise ValueError("Features must be normalized. Use features.normalize() to normalize them.")
-        
+            raise ValueError(
+                "Features must be normalized. Use features.normalize() to normalize them."
+            )
+
         if self.features.is_flattened:
             self.features = self.features.full()
-        
+
         if len(self.features.tensor.shape) != 4:
-            raise ValueError("Features tensor must have 4 dimensions (b, h, w, f) after full() call.")
+            raise ValueError(
+                "Features tensor must have 4 dimensions (b, h, w, f) after full() call."
+            )
         if self.features.tensor.shape[0] != 1:
-            raise ValueError("Features tensor must have batch size of 1 after full() call.")
+            raise ValueError(
+                "Features tensor must have batch size of 1 after full() call."
+            )
+
 
 class VideoDir:
     """
@@ -154,8 +179,10 @@ class VideoDir:
         """
         self.path = path
         frame_names = [
-            p for p in os.listdir(path) 
-            if os.path.splitext(p)[-1].lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
+            p
+            for p in os.listdir(path)
+            if os.path.splitext(p)[-1].lower()
+            in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
         ]
         frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
         self.frame_names = frame_names
@@ -218,7 +245,7 @@ class VideoFile:
 
     def __del__(self):
         """Releases the video capture object."""
-        if hasattr(self, 'video_capture'):
+        if hasattr(self, "video_capture"):
             self.video_capture.release()
             cv2.destroyAllWindows()
 
@@ -260,6 +287,7 @@ class Video:
     def __getitem__(self, idx):
         return self.video[idx]
 
+
 class ImageDirectory:
     """
     A class to load images from a directory.
@@ -273,8 +301,10 @@ class ImageDirectory:
         """
         self.path = path
         self.image_names = [
-            p for p in os.listdir(path) 
-            if os.path.splitext(p)[-1].lower() in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
+            p
+            for p in os.listdir(path)
+            if os.path.splitext(p)[-1].lower()
+            in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
         ]
         self.image_names.sort()  # Sort images by name
         self.image_count = len(self.image_names)
@@ -292,6 +322,7 @@ class ImageDirectory:
         image_path = os.path.join(self.path, image_name)
         img = Image.open(image_path).convert("RGB")
         return img
+
     def get_by_name(self, name: str) -> Image.Image:
         """
         Get an image by its name.
@@ -304,6 +335,7 @@ class ImageDirectory:
             raise ValueError(f"Image {name} not found in directory {self.path}")
         idx = self.filename_map[name]
         return self.__getitem__(idx)
+
 
 def calculate_dino_dimensions(
     size: Tuple[int, int], patch_size: int = 16
@@ -330,11 +362,13 @@ def calculate_dino_dimensions(
         "patch_size": patch_size,
     }
 
+
 @dataclass
 class OpenCLIPTransform:
     transform: nn.Module
     resize_size: Optional[Tuple[int, int]] = None
     feature_map_size: Optional[Tuple[int, int]] = None
+
 
 @dataclass
 class DINOTransform:
@@ -342,13 +376,13 @@ class DINOTransform:
     resize_size: Optional[Tuple[int, int]] = None
     feature_map_size: Optional[Tuple[int, int]] = None
 
+
 class TransformFactory:
     """
     Factory class to create transforms for feature extraction models.
     """
-    def __init__(self,
-                 model_name,
-                 patch_size: int) -> nn.Module:
+
+    def __init__(self, model_name, patch_size: int) -> nn.Module:
         """
         Get the appropriate transform for the model based on its name and input size.
         Args:
@@ -367,7 +401,7 @@ class TransformFactory:
 
         self.transform = None
         self._transform_cache = dict()
-    
+
     def __repr__(self):
         return f"TransformFactory(model_name={self.model_name}, patch_size={self.patch_size}, model_type={self.model_type})"
 
@@ -377,9 +411,12 @@ class TransformFactory:
             return self.transform
 
         from open_clip import create_model_from_pretrained
+
         _, transform = create_model_from_pretrained(self.model_name)
         # Pass a dummy image to get the resize size
-        dummy_transformed = transform(Image.fromarray(np.zeros((224, 224, 3), dtype=np.uint8)))
+        dummy_transformed = transform(
+            Image.fromarray(np.zeros((224, 224, 3), dtype=np.uint8))
+        )
         resize_size = (dummy_transformed.shape[2], dummy_transformed.shape[1])
 
         dims = calculate_dino_dimensions(resize_size, patch_size=self.patch_size)
@@ -389,7 +426,7 @@ class TransformFactory:
         self.transform = OpenCLIPTransform(
             transform=transform,
             resize_size=model_input_size,
-            feature_map_size=feature_map_size
+            feature_map_size=feature_map_size,
         )
         return self.transform
 
@@ -402,16 +439,20 @@ class TransformFactory:
         model_input_size = (dims["w"], dims["h"])
         feature_map_size = (dims["w_featmap"], dims["h_featmap"])
 
-        transform = transforms.Compose([
-            transforms.Resize((model_input_size[1], model_input_size[0])),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
+        transform = transforms.Compose(
+            [
+                transforms.Resize((model_input_size[1], model_input_size[0])),
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
 
         self.transform = DINOTransform(
             transform=transform,
             resize_size=model_input_size,
-            feature_map_size=feature_map_size
+            feature_map_size=feature_map_size,
         )
         self._transform_cache[input_size] = self.transform
         return self.transform
@@ -422,6 +463,7 @@ class TransformFactory:
         elif self.model_type == "dino":
             return self.get_dino_transform(input_size)
 
+
 @dataclass
 class InputData:
     """
@@ -429,11 +471,13 @@ class InputData:
     This class is used to store the source image or video, the transformed data,
     and the input and feature map sizes.
     """
+
     source: Union[Image.Image, Video, ImageDirectory]
     data: Union[torch.Tensor, DataLoader]
     input_size: Optional[Tuple[int, int]] = None
     feature_map_size: Optional[Tuple[int, int]] = None
     input_type: str = "unknown"
+
 
 class InputProcessor:
     """
@@ -447,7 +491,14 @@ class InputProcessor:
         resize_size: Optional size to resize all images to
     """
 
-    def __init__(self, model_name: str, input_path: str, patch_size: int, batch_size: int = 1, resize_size: Optional[Tuple[int, int]] = None):
+    def __init__(
+        self,
+        model_name: str,
+        input_path: str,
+        patch_size: int,
+        batch_size: int = 1,
+        resize_size: Optional[Tuple[int, int]] = None,
+    ):
         self.model_name = model_name
         self.input_path = input_path
         self.patch_size = patch_size
@@ -483,18 +534,21 @@ class InputProcessor:
             return self.process_varying_size()
         else:
             return self.process_fixed_size()
-    
+
     def process_varying_size(self):
         """Varying size processing for image directories, with batch_size=1.
         If the transform is set with a fixed size, batching can still be used.
         """
         transform_factory = TransformFactory(
-            model_name=self.model_name,
-            patch_size=self.patch_size
+            model_name=self.model_name, patch_size=self.patch_size
         )
         if self.resize_size is not None:
             print(f"Resizing all input to {self.resize_size}")
-        ds = ImageDirectoryDataset(self.source, transform_factory=transform_factory, resize_size=self.resize_size)
+        ds = ImageDirectoryDataset(
+            self.source,
+            transform_factory=transform_factory,
+            resize_size=self.resize_size,
+        )
         dataloader = DataLoader(ds, batch_size=self.batch_size, shuffle=False)
         return InputData(
             source=self.source,
@@ -516,8 +570,7 @@ class InputProcessor:
             print(f"Resizing input to {self.resize_size}")
 
         transform_factory = TransformFactory(
-            model_name=self.model_name,
-            patch_size=self.patch_size
+            model_name=self.model_name, patch_size=self.patch_size
         )
         self.transform = transform_factory.get_transform(original_input_size)
         print(f"Model input size: {self.transform.resize_size}")
@@ -558,9 +611,10 @@ class InputProcessor:
         else:
             raise ValueError(f"Unknown input type: {self.input_type}")
 
+
 class VideoDataset(Dataset):
     """Video dataset"""
-    
+
     def __init__(self, video: Video, transform: nn.Module = None):
         """
         PyTorch dataset for video frames.
@@ -575,20 +629,23 @@ class VideoDataset(Dataset):
         frame = self.video[idx]
         img = self.transform(frame)
         return {
-            "img": img, 
+            "img": img,
             "frame_idx": idx,
         }
 
     def __len__(self):
         return len(self.video)
 
+
 class ImageDirectoryDataset(Dataset):
     """Dataset for images in a directory."""
 
-    def __init__(self,
-                 image_directory: ImageDirectory,
-                 transform_factory: TransformFactory,
-                 resize_size: Optional[Tuple[int, int]] = None):
+    def __init__(
+        self,
+        image_directory: ImageDirectory,
+        transform_factory: TransformFactory,
+        resize_size: Optional[Tuple[int, int]] = None,
+    ):
         """
         Args:
             image_directory (ImageDirectory): Directory containing images.
@@ -598,7 +655,7 @@ class ImageDirectoryDataset(Dataset):
         self.image_directory = image_directory
         self.transform_factory = transform_factory
         self.resize_size = resize_size
-    
+
     def __getitem__(self, idx):
         img = self.image_directory[idx]
         if self.resize_size is not None:
@@ -616,18 +673,22 @@ class ImageDirectoryDataset(Dataset):
         return len(self.image_directory)
 
 
-def create_xarray_from_batch_frames(batch_frames: List[FrameData], identifier: Literal['filename', 'frame_idx']) -> xr.DataArray:
+def create_xarray_from_batch_frames(
+    batch_frames: List[FrameData], identifier: Literal["filename", "frame_idx"]
+) -> xr.DataArray:
     """
     Create xarray from batch frames.
     """
     # Check if all frames have the same feature dimensions
     feature_shapes = [frame.features.shape for frame in batch_frames]
     if len(set(feature_shapes)) > 1:
-        raise ValueError(f"Cannot create xarray from frames with different feature shapes: {set(feature_shapes)}")
-    
+        raise ValueError(
+            f"Cannot create xarray from frames with different feature shapes: {set(feature_shapes)}"
+        )
+
     tensor = torch.cat([x.features.full().tensor for x in batch_frames], dim=0)
     identifier_list = [getattr(x, identifier) for x in batch_frames]
-    
+
     # Assuming the tensor has shape (batch, height, width, feature)
     batch, height, width, feature = tensor.shape
 
@@ -645,19 +706,23 @@ def create_xarray_from_batch_frames(batch_frames: List[FrameData], identifier: L
     return data
 
 
-def create_dataframe_from_batch_frames(batch_frames: List[FrameData], identifier: Literal['filename', 'frame_idx']) -> pd.DataFrame:
+def create_dataframe_from_batch_frames(
+    batch_frames: List[FrameData], identifier: Literal["filename", "frame_idx"]
+) -> pd.DataFrame:
     """
     Create a DataFrame from batch frames.
     """
 
-    tensor = torch.cat([x.features.flat().tensor for x in batch_frames], dim=0).cpu().numpy()
+    tensor = (
+        torch.cat([x.features.flat().tensor for x in batch_frames], dim=0).cpu().numpy()
+    )
     identifier_list = [getattr(x, identifier) for x in batch_frames]
 
     features = rearrange(tensor, "b hw f -> (b hw) f")
 
     n_patches = batch_frames[0].features.flat().shape[1]
 
-    identifier_idx= []
+    identifier_idx = []
     patch_idx = []
 
     for frame_identifier in identifier_list:

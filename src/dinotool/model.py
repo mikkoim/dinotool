@@ -21,6 +21,7 @@ def load_model(model_name: str = "dinov2_vits14_reg") -> nn.Module:
     """
     if model_name.startswith("hf-hub:timm"):
         from open_clip import create_model_from_pretrained
+
         model = create_model_from_pretrained(model_name, return_transform=False)
         try:
             patch_size = model.visual.patch_size[0]
@@ -41,8 +42,7 @@ def load_model(model_name: str = "dinov2_vits14_reg") -> nn.Module:
 
 
 class OpenCLIPFeatureExtractor(nn.Module):
-    def __init__(self, model: nn.Module, device: str = "cuda"
-    ):
+    def __init__(self, model: nn.Module, device: str = "cuda"):
         """Feature extractor for OpenCLIP model.
         Args:
             model (nn.Module): OpenCLIP model.
@@ -56,8 +56,13 @@ class OpenCLIPFeatureExtractor(nn.Module):
 
         self.patch_size = model.patch_size
 
-
-    def forward(self, batch: torch.Tensor, flattened=True, normalized=True, return_clstoken=False):
+    def forward(
+        self,
+        batch: torch.Tensor,
+        flattened=True,
+        normalized=True,
+        return_clstoken=False,
+    ):
         if return_clstoken:
             with torch.no_grad():
                 batch = batch.to(self.device)
@@ -70,21 +75,22 @@ class OpenCLIPFeatureExtractor(nn.Module):
 
         with torch.no_grad():
             batch = batch.to(self.device)
-            feature_tensor = self.model.forward_intermediates(batch)["image_intermediates"][0]
+            feature_tensor = self.model.forward_intermediates(batch)[
+                "image_intermediates"
+            ][0]
 
         reshaped_tensor = rearrange(
             feature_tensor, "b f h w -> b h w f", h=h_featmap, w=w_featmap
         )
 
-        features = LocalFeatures(reshaped_tensor, is_flattened=False, h=h_featmap, w=w_featmap).normalize()
+        features = LocalFeatures(
+            reshaped_tensor, is_flattened=False, h=h_featmap, w=w_featmap
+        ).normalize()
         return features
 
 
-
 class DinoFeatureExtractor(nn.Module):
-    def __init__(
-        self, model: nn.Module, device: str = "cuda"
-    ):
+    def __init__(self, model: nn.Module, device: str = "cuda"):
         """Feature extractor for DINO model.
         Args:
             model (nn.Module): DINO model.
@@ -99,7 +105,13 @@ class DinoFeatureExtractor(nn.Module):
 
         self.patch_size = model.patch_size
 
-    def forward(self, batch: torch.Tensor, flattened=True, normalized=True, return_clstoken=False):
+    def forward(
+        self,
+        batch: torch.Tensor,
+        flattened=True,
+        normalized=True,
+        return_clstoken=False,
+    ):
         if return_clstoken:
             with torch.no_grad():
                 batch = batch.to(self.device)
@@ -114,7 +126,9 @@ class DinoFeatureExtractor(nn.Module):
         with torch.no_grad():
             batch = batch.to(self.device)
             feature_tensor = self.model.forward_features(batch)["x_norm_patchtokens"]
-        features = LocalFeatures(feature_tensor, is_flattened=True, h=h_featmap, w=w_featmap).normalize()
+        features = LocalFeatures(
+            feature_tensor, is_flattened=True, h=h_featmap, w=w_featmap
+        ).normalize()
         return features
 
 

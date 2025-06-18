@@ -6,11 +6,13 @@ import numpy as np
 import xarray as xr
 import pytest
 
+
 def test_image_only():
     config = DinotoolConfig(input="test/data/magpie.jpg", output="test/outputs/out.jpg")
     processor = DinotoolProcessor(config)
     processor.run()
     assert os.path.exists("test/outputs/out.jpg")
+
 
 def test_image_features_full():
     config = DinotoolConfig(
@@ -28,7 +30,10 @@ def test_image_features_full():
     assert len(ds.y) == 26
     assert len(ds.x) == 35
     assert len(ds.feature) == 384
-    assert np.allclose(np.linalg.norm(ds.sel(x=0,y=0,frame_idx=0).values), 1.0, atol=1e-5)
+    assert np.allclose(
+        np.linalg.norm(ds.sel(x=0, y=0, frame_idx=0).values), 1.0, atol=1e-5
+    )
+
 
 def test_image_features_full_siglip2():
     config = DinotoolConfig(
@@ -47,7 +52,10 @@ def test_image_features_full_siglip2():
     assert len(ds.y) == 32
     assert len(ds.x) == 32
     assert len(ds.feature) == 768
-    assert np.allclose(np.linalg.norm(ds.sel(x=0,y=0,frame_idx=0).values), 1.0, atol=1e-5)
+    assert np.allclose(
+        np.linalg.norm(ds.sel(x=0, y=0, frame_idx=0).values), 1.0, atol=1e-5
+    )
+
 
 def test_image_features_flat():
     config = DinotoolConfig(
@@ -62,9 +70,10 @@ def test_image_features_flat():
 
     df = pd.read_parquet("test/outputs/out.parquet")
     assert df.shape == (910, 384)
-    assert df.index.names == ['frame_idx', 'patch_idx']
+    assert df.index.names == ["frame_idx", "patch_idx"]
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
     assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
+
 
 def test_image_features_frame():
     config = DinotoolConfig(
