@@ -104,6 +104,7 @@ class DinoFeatureExtractor(nn.Module):
             with torch.no_grad():
                 batch = batch.to(self.device)
                 features = self.model.forward(batch)
+                features = torch.nn.functional.normalize(features, dim=-1)
                 return features
 
         b, c, h, w = batch.shape

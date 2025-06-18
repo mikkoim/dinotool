@@ -672,20 +672,3 @@ def create_dataframe_from_batch_frames(batch_frames: List[FrameData], identifier
     columns = [f"feature_{i}" for i in range(features.shape[1])]
     df = pd.DataFrame(features, index=index, columns=columns)
     return df
-
-
-def create_dataframe_from_single_frame(frame: FrameData) -> pd.DataFrame:
-    """Create DataFrame from a single frame."""
-    features = frame.features.flat()
-    
-    frame_idx = [frame.frame_idx] * n_patches
-    patch_idx = list(range(n_patches))
-    
-    index = pd.MultiIndex.from_tuples(
-        list(zip(frame_idx, patch_idx)), names=["frame_idx", "patch_idx"]
-    )
-    
-    columns = [f"feature_{i}" for i in range(features.shape[1])]
-    df = pd.DataFrame(features, index=index, columns=columns)
-    
-    return df

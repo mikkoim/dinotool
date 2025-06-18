@@ -290,8 +290,12 @@ class FeatureSaver:
             with xr.open_dataset(path) as ds:
                 ds.load()
                 return ds
+        if 'filename' in xr.open_dataset(nc_files[0]).dims:
+            identifier = 'filename'
+        else:
+            identifier = 'frame_idx'
         
-        xr_data = xr.concat([load_dataset(path) for path in nc_files], dim="frame_idx")
+        xr_data = xr.concat([load_dataset(path) for path in nc_files], dim=identifier)
         xr_data.to_zarr(output_name)
     
     @staticmethod
