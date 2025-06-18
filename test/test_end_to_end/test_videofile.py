@@ -2,6 +2,7 @@ from dinotool.cli import DinotoolConfig, DinotoolProcessor
 from pathlib import Path
 import os
 import pandas as pd
+import numpy as np
 import xarray as xr
 
 def test_videofile_only():
@@ -29,6 +30,7 @@ def test_videofile_features_full():
     assert len(ds.y) == 19
     assert len(ds.x) == 34
     assert len(ds.feature) == 384
+    assert np.allclose(np.linalg.norm(ds.sel(x=0,y=0,frame_idx=0).values), 1.0, atol=1e-5)
 
 def test_videofile_features_flat():
     config = DinotoolConfig(
@@ -46,6 +48,7 @@ def test_videofile_features_flat():
     assert df.shape == (58140, 384)
     assert df.index.names == ['frame_idx', 'patch_idx']
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
 
 
 def test_videofile_features_frame():
@@ -62,3 +65,4 @@ def test_videofile_features_frame():
     df = pd.read_parquet("test/outputs/nasaout6.parquet")
     assert df.shape == (90, 384)
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)

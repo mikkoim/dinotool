@@ -2,6 +2,7 @@ from dinotool.cli import DinotoolConfig, DinotoolProcessor
 from pathlib import Path
 import os
 import pandas as pd
+import numpy as np
 import xarray as xr
 
 def test_videodir_only():
@@ -43,6 +44,7 @@ def test_videodir_features_full():
     assert len(ds.y) == 19
     assert len(ds.x) == 34
     assert len(ds.feature) == 384
+    assert np.allclose(np.linalg.norm(ds.sel(x=0,y=0,frame_idx=0).values), 1.0, atol=1e-5)
 
 
 def test_videodir_features_flat():
@@ -60,6 +62,7 @@ def test_videodir_features_flat():
     assert df.shape == (5814, 384)
     assert df.index.names == ['frame_idx', 'patch_idx']
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
 
 def test_videodir_features_flat_novis():
     config = DinotoolConfig(
@@ -77,6 +80,7 @@ def test_videodir_features_flat_novis():
     assert df.shape == (5814, 384)
     assert df.index.names == ['frame_idx', 'patch_idx']
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
 
 def test_videodir_features_frame():
     config = DinotoolConfig(
@@ -94,3 +98,4 @@ def test_videodir_features_frame():
 
     assert df.shape == (9, 384)
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)

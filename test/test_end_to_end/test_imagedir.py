@@ -2,6 +2,7 @@ from dinotool.cli import DinotoolConfig, DinotoolProcessor
 from pathlib import Path
 import os
 import pandas as pd
+import numpy as np
 import xarray as xr
 
 def test_imagedir_only():
@@ -35,6 +36,7 @@ def test_imagedir_features_full():
     assert len(ds.y) == 64
     assert len(ds.x) == 64
     assert len(ds.feature) == 384
+    assert np.allclose(np.linalg.norm(ds.sel(x=0,y=0,frame_idx=0).values), 1.0, atol=1e-5)
 
 def test_imagedir_features_flat():
     config = DinotoolConfig(
@@ -54,6 +56,7 @@ def test_imagedir_features_flat():
     assert df.shape == (4096, 384)
     assert df.index.names == ['frame_idx', 'patch_idx']
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
 
 def test_imagedir_features_frame():
     config = DinotoolConfig(
@@ -69,6 +72,8 @@ def test_imagedir_features_frame():
     assert df.index.names == ['filename']
     assert set(df.index) == set([x.name for x in Path("test/data/imagefolder").glob("*")])
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
+
 
 # Resized and batch processed
 def test_batched_imagedir_features_full():
@@ -89,6 +94,7 @@ def test_batched_imagedir_features_full():
     assert len(ds.y) == 19
     assert len(ds.x) == 34
     assert len(ds.feature) == 384
+    assert np.allclose(np.linalg.norm(ds.sel(x=0,y=0,filename='bird1.jpg').values), 1.0, atol=1e-5)
 
 def test_batched_imagedir_features_flat():
     config = DinotoolConfig(
@@ -106,6 +112,7 @@ def test_batched_imagedir_features_flat():
     assert df.shape == (2584, 384)
     assert df.index.names == ['filename', 'patch_idx']
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
 
 def test_batched_imagedir_features_frame():
     config = DinotoolConfig(
@@ -124,3 +131,4 @@ def test_batched_imagedir_features_frame():
     assert df.index.names == ['filename']
     assert set(df.index) == set([x.name for x in Path("test/data/imagefolder").glob("*")])
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
