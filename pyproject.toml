@@ -1,7 +1,7 @@
 [project]
 name = "dinotool"
-version = "0.1.1"
-description = "Command-line tool for extracting DINO features from images and videos"
+version = "0.2.0"
+description = "Command-line tool for extracting DINO, CLIP and SigLIP features from images and videos"
 readme = "README.md"
 authors = [
     { name = "Mikko Impiö", email = "mikko.impio@gmail.com" }
@@ -10,6 +10,8 @@ license = {text = "Apache License (2.0)"}
 keywords = [
     "dino",
     "feature extraction",
+    "deep learning",
+    "computer vision",
     "image processing",
     "video processing",
     "machine learning",
@@ -25,6 +27,7 @@ dependencies = [
     "einops>=0.8.1",
     "h5py>=3.13.0",
     "numpy>=2.0.0",
+    "open-clip-torch>=2.32.0",
     "opencv-python>=4.11.0.86",
     "pillow>=11.1.0",
     "pyarrow>=19.0.1",

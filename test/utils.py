@@ -1,6 +1,6 @@
 import pytest
 from dinotool.data import Video, VideoDataset, FrameData
-from dinotool.model import load_dino_model
+from dinotool.model import load_model
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -9,7 +9,7 @@ from PIL import Image
 
 
 def setup_model_and_batch():
-    model = load_dino_model("dinov2_vits14_reg")
+    model = load_model("dinov2_vits14_reg")
     video = Video("test/data/nasa.mp4")
 
     transform = transforms.Compose(
