@@ -1,6 +1,6 @@
 [project]
 name = "dinotool"
-version = "0.2.0"
+version = "0.2.1"
 description = "Command-line tool for extracting DINO, CLIP and SigLIP features from images and videos"
 readme = "README.md"
 authors = [
@@ -40,6 +40,9 @@ dependencies = [
     "zarr>=3.0.6",
 ]
 
+[tool.uv.sources]
+xformers = { index = "xformers", marker = "sys_platform == 'linux'" }
+
 [project.urls]
 Homepage = "https://github.com/mikkoim/dinotool"
 Issues = "https://github.com/mikkoim/dinotool/issues"
@@ -61,3 +64,8 @@ dev = [
     "matplotlib>=3.10.1",
     "pytest>=8.3.5",
 ]
+
+[[tool.uv.index]]
+name = "xformers"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
