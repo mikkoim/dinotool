@@ -39,6 +39,39 @@ def test_video():
         _ = video[1000]
 
 
+def test_find_source():
+    from dinotool.data import InputProcessor, ImageDirectory
+    from PIL import Image
+
+    # Image
+    source, input_type = InputProcessor.find_source("test/data/bird1.jpg")
+    assert input_type == 'single_image'
+    assert isinstance(source, Image.Image)
+
+    # Video
+    source, input_type = InputProcessor.find_source("test/data/nasa.mp4")
+    assert input_type == 'video_file'
+    assert isinstance(source, Video)
+
+    # Video directory
+    source, input_type = InputProcessor.find_source("test/data/nasa_frames")
+    assert input_type == 'video_dir'
+    assert isinstance(source, Video)
+
+    # Image directory
+    source, input_type = InputProcessor.find_source("test/data/imagefolder")
+    assert input_type == 'image_directory'
+    assert isinstance(source, ImageDirectory) 
+
+    # Invalid path
+    with pytest.raises(FileNotFoundError):
+        source, input_type = InputProcessor.find_source("test/data/nonexistent.jpg")
+
+    # Invalid folder
+    with pytest.raises(FileNotFoundError):
+        source, input_type = InputProcessor.find_source("test/data/nonexistent_folder")
+    
+
 def test_calculate_dino_dimensions():
     size = (640, 480)
     patch_size = 16
