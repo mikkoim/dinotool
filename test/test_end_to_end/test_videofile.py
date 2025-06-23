@@ -27,7 +27,7 @@ def test_videofile_features_full():
     processor.run()
 
     assert os.path.exists("test/outputs/nasaout3.zarr")
-    ds = xr.open_dataarray("test/outputs/nasaout3.zarr")
+    ds = xr.open_zarr("test/outputs/nasaout3.zarr").to_dataarray()
     assert len(ds.frame_idx) == 90
     assert len(ds.y) == 19
     assert len(ds.x) == 34

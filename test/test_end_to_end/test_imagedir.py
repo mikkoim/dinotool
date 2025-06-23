@@ -91,7 +91,7 @@ def test_batched_imagedir_features_full():
     processor = DinotoolProcessor(config)
     processor.run()
 
-    ds = xr.open_dataarray("test/outputs/if1_b.zarr")
+    ds = xr.open_zarr("test/outputs/if1_b.zarr").to_dataarray()
 
     assert len(ds.filename) == 4
     assert len(ds.y) == 19

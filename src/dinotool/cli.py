@@ -4,6 +4,7 @@ DINOtool CLI: Extract and visualize DINO features from images and videos.
 
 import argparse
 import os
+import shutil
 import subprocess
 import uuid
 from dataclasses import dataclass
@@ -440,7 +441,7 @@ class FrameLevelProcessor:
     @staticmethod
     def _cleanup_temp_dir(tmpdir: Path) -> None:
         """Clean up temporary directory."""
-        subprocess.run(["rm", "-rf", str(tmpdir)], check=True)
+        shutil.rmtree(tmpdir, ignore_errors=True)
 
 
 class ExtractorFactory:
@@ -467,26 +468,38 @@ def create_video_from_frames(
     output_path = Path(output_path)
     if not output_path.parent.exists():
         output_path.parent.mkdir(parents=True, exist_ok=True)
-    subprocess.run(
-        [
-            "ffmpeg",
-            "-y",
-            "-framerate",
-            str(framerate),
-            "-pattern_type",
-            "glob",
-            "-i",
-            f"{tmpdir}/*.jpg",
-            "-c:v",
-            "libx264",
-            "-pix_fmt",
-            "yuv420p",
-            str(output_path),
-        ],
-        check=True,
-    )
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-framerate",
+                str(framerate),
+                "-i",
+                f"{tmpdir}/%05d.jpg",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                str(output_path),
+            ],
+            check=True,
+        )
 
-    print(f"Saved visualization to {output_path}")
+        print(f"Saved visualization to {output_path}")
+    except FileNotFoundError:
+        raise FileNotFoundError(
+            "ffmpeg is not installed. Please install ffmpeg to create video outputs."
+        )
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"Failed to create video from frames: {e}. "
+        )
+    except Exception as e:
+        raise RuntimeError(
+            f"An unexpected error occurred while creating video: {e}"
+        ) from e
+    
 
 
 class DinotoolProcessor:
@@ -642,7 +655,7 @@ class DinotoolProcessor:
 
         finally:
             # Cleanup
-            subprocess.run(["rm", "-rf", tmpdir], check=True)
+            shutil.rmtree(tmpdir, ignore_errors=True)
 
     def _process_video_batches(
         self,

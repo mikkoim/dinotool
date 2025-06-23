@@ -14,7 +14,8 @@ def test_feature_extractor_basic():
     model = d["model"]
     batch = d["batch"]
 
-    extractor = DinoFeatureExtractor(model, device="cuda")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    extractor = DinoFeatureExtractor(model, device=device)
 
     out = extractor(batch["img"]).tensor
     assert out.shape == torch.Size([1, 256, 384])
@@ -54,7 +55,8 @@ def test_pca_module():
     model = d["model"]
     batch = d["batch"]
 
-    extractor = DinoFeatureExtractor(model, device="cuda")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    extractor = DinoFeatureExtractor(model, device=device)
     features = extractor(batch["img"])
 
     pca = PCAModule(n_components=3)
@@ -73,7 +75,8 @@ def test_pca_module_nonflat():
     model = d["model"]
     batch = d["batch"]
 
-    extractor = DinoFeatureExtractor(model, device="cuda")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    extractor = DinoFeatureExtractor(model, device=device)
     features = extractor(batch["img"])
 
     pca = PCAModule(n_components=3, feature_map_size=(16, 16))
@@ -98,7 +101,8 @@ def test_batch_handler():
     input_data = input_processor.process()
     batch = next(iter(input_data.data))
 
-    extractor = DinoFeatureExtractor(model, device="cuda")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    extractor = DinoFeatureExtractor(model, device=device)
     features = extractor(batch["img"])
 
     pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
@@ -128,7 +132,8 @@ def test_feature_saving():
     input_data = input_processor.process()
     batch = next(iter(input_data.data))
 
-    extractor = DinoFeatureExtractor(model, device="cuda")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    extractor = DinoFeatureExtractor(model, device=device)
     features = extractor(batch["img"])
     pca = PCAModule(n_components=3, feature_map_size=input_data.feature_map_size)
     pca.fit(features.flat().tensor)
