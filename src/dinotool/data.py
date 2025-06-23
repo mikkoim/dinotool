@@ -508,7 +508,24 @@ class InputProcessor:
         self.source, self.input_type = self.find_source(input_path)
 
     @staticmethod
-    def find_source(input_path: str):
+    def find_source(
+        input_path: str,
+    ) -> Tuple[
+        Union[Image.Image, Video, ImageDirectory],
+        Literal["single_image", "video_file", "video_dir", "image_directory"],
+    ]:
+        """
+        Find the source of the input based on the path.
+
+        Args:
+            input_path (str): Path to the input file or directory.
+        Returns:
+            Tuple[Union[Image.Image, Video, ImageDirectory], str]: A tuple containing the
+            source object (Image, Video, or ImageDirectory) and the type of input which 
+            can be "single_image", "video_file", "video_dir", or "image_directory".
+
+        Improvements suggested by @AntiLibrary5 in issue #3.
+        """
         if not os.path.exists(input_path):
             raise FileNotFoundError(f"Input path does not exist: {input_path}")
         if os.path.isdir(input_path):
