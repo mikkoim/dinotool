@@ -509,25 +509,39 @@ class InputProcessor:
 
     @staticmethod
     def find_source(input_path: str):
-        """
-        Setup processing based on input type
-        """
-        try:
-            source = Image.open(input_path).convert("RGB")
-            return source, "single_image"
-        except (Image.UnidentifiedImageError, IsADirectoryError):
-            if os.path.isdir(input_path):
+        if not os.path.exists(input_path):
+            raise FileNotFoundError(f"Input path does not exist: {input_path}")
+        if os.path.isdir(input_path):
+            try:
+                source = Video(input_path)
+                return source, "video_dir"
+            except Exception as video_error:
                 try:
-                    source = Video(input_path)
-                    return source, "video_dir"
-                except ValueError:
                     source = ImageDirectory(input_path)
                     return source, "image_directory"
-            else:
-                source = Video(input_path)
-                return source, "video_file"
-        except Exception as e:
-            raise ValueError(f"Could not identify input type for {input_path}: {e}")
+                except Exception as image_error:
+                    raise ValueError(
+                        f"Directory '{input_path}' could not be processed as a video or image directory.\n"
+                        f"--> Video-related error: {video_error}\n"
+                        f"--> Image-directory-related error: {image_error}"
+                    ) from image_error
+        elif os.path.isfile(input_path):
+            try:
+                source = Image.open(input_path).convert("RGB")
+                return source, "single_image"
+            except Image.UnidentifiedImageError:
+                try:
+                    source = Video(input_path)
+                    return source, "video_file"
+                except Exception as video_error:
+                    raise ValueError(
+                        f"File '{input_path}' could not be identified as a supported image or video file.\n"
+                        f"--> Video-related error: {video_error}"
+                    ) from video_error
+        else:
+            raise ValueError(
+                f"Input path '{input_path}' is not a valid file or directory."
+            )
 
     def process(self):
         if self.input_type == "image_directory":
