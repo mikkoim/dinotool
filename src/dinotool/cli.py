@@ -21,6 +21,7 @@ import dinotool
 from dinotool import data
 from dinotool.model import (
     DinoFeatureExtractor,
+    DinoV3FeatureExtractor,
     OpenCLIPFeatureExtractor,
     PCAModule,
     load_model,
@@ -457,6 +458,9 @@ class ExtractorFactory:
         """Create appropriate feature extractor based on model name."""
         if model_name.startswith("hf-hub:timm"):
             return OpenCLIPFeatureExtractor(model, device=device)
+        
+        elif model_name.startswith("facebook/dinov3"):
+            return DinoV3FeatureExtractor(model, device=device)
         else:
             return DinoFeatureExtractor(model, device=device)
 
@@ -692,7 +696,6 @@ class DinotoolProcessor:
 
         except KeyboardInterrupt:
             print("Keyboard interrupt detected. Cleaning up...")
-            progbar.close()
             raise
 
     def _process_image_directory(

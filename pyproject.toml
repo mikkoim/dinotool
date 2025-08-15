@@ -24,6 +24,7 @@ classifiers = [
 ]
 requires-python = ">=3.11, <3.13"
 dependencies = [
+    "accelerate>=1.10.0",
     "einops>=0.8.1",
     "h5py>=3.13.0",
     "numpy>=2.0.0",
@@ -35,6 +36,7 @@ dependencies = [
     "torch>=2.6.0",
     "torchvision>=0.21.0",
     "tqdm>=4.67.1",
+    "transformers",
     "xarray>=2025.3.1",
     "xformers>=0.0.29.post3 ; sys_platform == 'linux'",
     "zarr>=3.0.6",
@@ -42,6 +44,7 @@ dependencies = [
 
 [tool.uv.sources]
 xformers = { index = "xformers", marker = "sys_platform == 'linux'" }
+transformers = { git = "https://github.com/huggingface/transformers" }
 
 [project.urls]
 Homepage = "https://github.com/mikkoim/dinotool"
