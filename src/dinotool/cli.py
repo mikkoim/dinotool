@@ -23,6 +23,7 @@ from dinotool.model import (
     DinoFeatureExtractor,
     DinoV3FeatureExtractor,
     OpenCLIPFeatureExtractor,
+    RADIOFeatureExtractor,
     PCAModule,
     load_model,
 )
@@ -461,6 +462,8 @@ class ExtractorFactory:
         
         elif model_name.startswith("facebook/dinov3"):
             return DinoV3FeatureExtractor(model, device=device)
+        elif model_name.startswith("NVlabs/RADIO/"):
+            return RADIOFeatureExtractor(model, device=device)
         else:
             return DinoFeatureExtractor(model, device=device)
 

@@ -34,6 +34,10 @@ def load_model(model_name: str = "dinov2_vits14_reg") -> nn.Module:
     elif model_name.startswith("facebook/dinov3"):
         model = AutoModel.from_pretrained(model_name)
         model.patch_size = model.config.patch_size
+    
+    elif model_name.startswith("NVlabs/RADIO/"):
+        model_version = model_name.split("/")[-1]
+        model = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_version)
 
     else:
         with warnings.catch_warnings():
@@ -188,6 +192,57 @@ class DinoV3FeatureExtractor(nn.Module):
 
         features = LocalFeatures(
             feature_tensor, is_flattened=True, h=h_featmap, w=w_featmap
+        )
+
+        if normalized:
+            features = features.normalize()
+
+        return features
+
+class RADIOFeatureExtractor(nn.Module):
+    def __init__(self, model: nn.Module, device: str = "cuda"):
+        """Feature extractor for RADIO model.
+        Args:
+            model (nn.Module): RADIO model.
+            input_size (Tuple[int, int]): feature map size (width, height).
+            device (str): device to use for computation.
+        """
+        super().__init__()
+        self.model = model
+        self.model.eval()
+        self.model = self.model.to(device)
+        self.device = device
+
+        self.patch_size = model.patch_size
+
+    def forward(
+        self,
+        batch: torch.Tensor,
+        flattened=True,
+        normalized=True,
+        return_clstoken=False,
+    ):
+
+        b, c, h, w = batch.shape
+        dims = calculate_dino_dimensions((w, h), self.patch_size)
+        h_featmap, w_featmap = dims["h_featmap"], dims["w_featmap"]
+
+        with torch.no_grad():
+            batch = batch.to(self.device)
+            global_feature, feature_tensor = self.model(batch, feature_fmt='NCHW')
+
+        if return_clstoken:
+            if normalized:
+                features = torch.nn.functional.normalize(global_feature, dim=-1)
+            return global_feature
+        
+        feature_tensor = rearrange(
+            feature_tensor, "b f h w -> b h w f",
+        )
+        
+        features = LocalFeatures(
+            feature_tensor, is_flattened=False,
+            h=h_featmap, w=w_featmap
         )
 
         if normalized:

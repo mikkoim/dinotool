@@ -12,6 +12,7 @@ import xarray as xr
 from einops import rearrange
 import pandas as pd
 from collections import defaultdict
+from torchvision.transforms.functional import pil_to_tensor
 
 import torch
 from einops import rearrange
@@ -376,6 +377,35 @@ class DINOTransform:
     resize_size: Optional[Tuple[int, int]] = None
     feature_map_size: Optional[Tuple[int, int]] = None
 
+@dataclass
+class RADIOTransform:
+    transform: nn.Module
+    resize_size: Optional[Tuple[int, int]] = None
+    feature_map_size: Optional[Tuple[int, int]] = None
+
+class RADIOPreprocessor(nn.Module):
+    """A module to preprocess images for RADIO models.
+    Follows the RADIO preprocessing steps:
+
+    x = Image.open('assets/radio_overview_github.png').convert('RGB')
+    x = pil_to_tensor(x).to(dtype=torch.float32, device='cuda')
+    x.div_(255.0)  # RADIO expects the input values to be between 0 and 1
+    x = x.unsqueeze(0) # Add a batch dimension
+
+    conditioner comes from the RADIO model.make_preprocessing_external() method.
+    """
+
+    def __init__(self, resize_size, conditioner):
+        super().__init__()
+        self.resize_size = resize_size
+        self.conditioner = conditioner
+
+    def forward(self, img: Image.Image) -> torch.Tensor:
+        x = transforms.Resize(self.resize_size)(img)
+        x = transforms.ToTensor()(x)
+        x = self.conditioner(x)
+        return x
+
 
 class TransformFactory:
     """
@@ -396,6 +426,14 @@ class TransformFactory:
 
         if self.model_name.startswith("hf-hub:timm"):
             self.model_type = "openclip"
+        elif model_name.startswith("NVlabs/RADIO/"):
+            self.model_type = "radio"
+            model_version = model_name.split("/")[-1]
+            self._RADIOmodel = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_version)
+            self._RADIOmodel.to("cpu")
+            self._RADIOmodel.eval()
+            self._RADIOconditioner = self._RADIOmodel.make_preprocessor_external()
+
         else:
             self.model_type = "dino"
 
@@ -405,7 +443,7 @@ class TransformFactory:
     def __repr__(self):
         return f"TransformFactory(model_name={self.model_name}, patch_size={self.patch_size}, model_type={self.model_type})"
 
-    def get_openclip_transform(self) -> nn.Module:
+    def get_openclip_transform(self):
         if self.transform is not None:
             # If a transform is already set, return it
             return self.transform
@@ -430,7 +468,7 @@ class TransformFactory:
         )
         return self.transform
 
-    def get_dino_transform(self, input_size: Tuple[int, int]) -> nn.Module:
+    def get_dino_transform(self, input_size: Tuple[int, int]):
         if input_size in self._transform_cache:
             # If a transform for this input size is already cached, return it
             return self._transform_cache[input_size]
@@ -456,12 +494,37 @@ class TransformFactory:
         )
         self._transform_cache[input_size] = self.transform
         return self.transform
+    
+    def get_radio_transform(self, input_size: Tuple[int, int]):
+        if input_size in self._transform_cache:
+            # If a transform for this input size is already cached, return it
+            return self._transform_cache[input_size]
+        
+        dims = calculate_dino_dimensions(input_size, patch_size=self.patch_size)
+        model_input_size = (dims["w"], dims["h"])
+        feature_map_size = (dims["w_featmap"], dims["h_featmap"])
+
+        preprocessor = RADIOPreprocessor(
+            resize_size=(model_input_size[1], model_input_size[0]),
+            conditioner=self._RADIOconditioner,
+        )
+
+        self.transform = RADIOTransform(
+            transform=preprocessor,
+            resize_size=model_input_size,
+            feature_map_size=feature_map_size,
+        )
+
+        self._transform_cache[input_size] = self.transform
+        return self.transform
 
     def get_transform(self, input_size: Tuple[int, int]) -> nn.Module:
         if self.model_type == "openclip":
             return self.get_openclip_transform()
         elif self.model_type == "dino":
             return self.get_dino_transform(input_size)
+        elif self.model_type == "radio":
+            return self.get_radio_transform(input_size)
 
 
 @dataclass
