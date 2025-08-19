@@ -11,6 +11,9 @@ pip install dinotool
 dinotool test.jpg -o out.jpg
 ```
 
+> [!TIP]
+> DINOv3 is now available in the `dev` branch! Install with `pip install https://github.com/mikkoim/dinotool.git@dev`. I will update the main version once `transformers` has a stable version with support for DINOv3.
+
 ## ✨ Features
 
 - Works with:
