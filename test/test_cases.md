@@ -4,12 +4,15 @@
 uv run dinotool test/data/bird1.jpg -o out.jpg
 # -> Outputs out.jpg
 
+# Use DINOv3 (requires access to gated models)
+uv run dinotool test/data/bird1.jpg -o out-v3.jpg -m dinov3-s
+
 # Video input
 uv run dinotool test/data/nasa.mp4 -o nasa.mp4 --batch-size 4
 # -> Outputs nasa.mp4
 
-# "I want see how SigLIP2 local features look like"
-uv run dinotool test/data/nasa.mp4 -o nasa-siglip2.mp4 --batch-size 4 --model-name siglip2
+# "I want see how RADIO local features look like"
+uv run dinotool test/data/nasa.mp4 -o nasa-radio.mp4 --batch-size 4 --model-name radio-b
 # -> Outputs nasa-siglip2.mp4
 # CLIP/SigLIP inputs are resized based on the preprocessing pipeline of the model.
 
@@ -29,8 +32,8 @@ uv run dinotool test/data/imagefolder -o my_imagefolder --save-features 'full'
 uv run dinotool test/data/imagefolder -o siglip2feats --save-features 'frame' --model-name siglip2
 # -> Produces a file siglip2feats.parquet, with index determining the filename
 
-# I have a folder of images but they can be all resized to the same size for faster batch processing
-uv run dinotool test/data/drone_images -o drone --save-features 'full' --input-size 512 512 --batch-size 4 --no-vis
+# I have a folder of images but they can be all resized to the same size for faster batch processing. Use the DINOv3 remote sensing model (gated)
+uv run dinotool test/data/drone_images -o drone --save-features 'full' --input-size 512 512 --batch-size 4 --no-vis -m dinov3-l-sat
 # -> Produces drone.zarr with full local features with structure
 # with --save features 'flat' this would produce a partitioned parquet directory
 

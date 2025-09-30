@@ -3,12 +3,16 @@ from dinotool.data import Video, VideoDataset
 import torch
 from torch.utils.data import DataLoader
 from torchvision import transforms
+from dinotool.cli import DinoToolModel
+from dinotool.model import load_model, PCAModule, DinoFeatureExtractor
+from dinotool.data import InputProcessor
+from dinotool.utils import BatchHandler
+import numpy as np
 
 from .utils import setup_model_and_batch
 
 
 def test_feature_extractor_basic():
-    from dinotool.model import DinoFeatureExtractor
 
     d = setup_model_and_batch()
     model = d["model"]
@@ -35,6 +39,47 @@ def test_feature_extractor_basic():
     # )
 
 
+@pytest.mark.parametrize("model_name,features,normalized", [
+    ("vit-s", "full", True),
+    ("vit-s", "full", False),
+    ("vit-s", "flat", True),
+    ("vit-s", "flat", False),
+    ("vit-s", "frame", True),
+    ("vit-s", "frame", False),
+    ("dinov3-s", "full", True),
+    ("dinov3-s", "full", False),
+    ("dinov3-s", "flat", True),
+    ("dinov3-s", "flat", False),
+    ("dinov3-s", "frame", True),
+    ("dinov3-s", "frame", False),
+    ("radio-b", "full", True),
+    ("radio-b", "full", False),
+    ("radio-b", "flat", True),
+    ("radio-b", "flat", False),
+    ("radio-b", "frame", True),
+    ("radio-b", "frame", False),
+])
+def test_dinotoolmodel(model_name, features, normalized):
+    model = DinoToolModel(model_name=model_name)
+    batch = torch.rand(1, 3, 224, 224)
+    features = model(batch, features=features, normalized=normalized)
+    print(features.shape)
+
+    if features == "frame":
+        assert len(features.shape) == 2
+    elif features == "flat":
+        assert len(features.shape) == 3
+    elif features == "full":
+        assert len(features.shape) == 4
+
+    if normalized:
+        if features == "frame":
+            assert torch.allclose(features[0, :].norm().cpu(), torch.tensor([1.0]), atol=1e-5)
+        elif features == "flat":
+            assert torch.allclose(features[0, 0, :].norm().cpu(), torch.tensor([1.0]), atol=1e-5)
+        elif features == "full":
+            assert torch.allclose(features[0, 0, 0, :].norm().cpu(), torch.tensor([1.0]), atol=1e-5)
+
 # def test_feature_extractor_flattened():
 #     from dinotool.model import DinoFeatureExtractor
 
@@ -48,8 +93,6 @@ def test_feature_extractor_basic():
 
 
 def test_pca_module():
-    from dinotool.model import PCAModule
-    from dinotool.model import DinoFeatureExtractor
 
     d = setup_model_and_batch()
     model = d["model"]
@@ -66,10 +109,17 @@ def test_pca_module():
     pca_features = pca.transform(features.flat().tensor)
     assert pca_features.shape == (1, 256, 3)
 
+@pytest.mark.parametrize("n_components", [1, 3, 9])
+def test_pca_module_dinotoolmodel(n_components):
+    model = DinoToolModel("vit-s")
+    batch = torch.rand(1, 3, 224, 224)
+    features = model(batch, features="flat")
+    pca_features = model.pca(features, n_components=n_components)
+    assert pca_features.shape == (16,16, n_components)
+    assert np.allclose(pca_features.min(), 0.0)
+    assert np.allclose(pca_features.max(), 1.0)
 
 def test_pca_module_nonflat():
-    from dinotool.model import PCAModule
-    from dinotool.model import DinoFeatureExtractor
 
     d = setup_model_and_batch()
     model = d["model"]
@@ -86,9 +136,6 @@ def test_pca_module_nonflat():
 
 
 def test_batch_handler():
-    from dinotool.model import load_model, PCAModule, DinoFeatureExtractor
-    from dinotool.data import InputProcessor
-    from dinotool.utils import BatchHandler
 
     model = load_model("dinov2_vits14_reg")
 

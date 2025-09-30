@@ -105,6 +105,11 @@ class OpenCLIPFeatureExtractor(nn.Module):
         if normalized:
             features = features.normalize()
 
+        if flattened:
+            features = features.flat()
+        else:
+            features = features.full()
+
         return features
 
 
@@ -153,6 +158,11 @@ class DinoFeatureExtractor(nn.Module):
         if normalized:
             features = features.normalize()
 
+        if flattened:
+            features = features.flat()
+        else:
+            features = features.full()
+
         return features
 
 class DinoV3FeatureExtractor(nn.Module):
@@ -188,9 +198,9 @@ class DinoV3FeatureExtractor(nn.Module):
             outputs = self.model(batch)
 
         if return_clstoken:
-            clstoken = outputs.pooler_output
+            features = outputs.pooler_output
             if normalized:
-                features = torch.nn.functional.normalize(clstoken, dim=-1)
+                features = torch.nn.functional.normalize(features, dim=-1)
             return features
         
         feature_tensor = outputs.last_hidden_state[:,5:,:]
@@ -201,6 +211,11 @@ class DinoV3FeatureExtractor(nn.Module):
 
         if normalized:
             features = features.normalize()
+
+        if flattened:
+            features = features.flat()
+        else:
+            features = features.full()
 
         return features
 
@@ -253,6 +268,11 @@ class RADIOFeatureExtractor(nn.Module):
         if normalized:
             features = features.normalize()
 
+        if flattened:
+            features = features.flat()
+        else:
+            features = features.full()
+
         return features
 
 
@@ -290,7 +310,7 @@ class PCAModule:
         pca_features = pca_features.reshape(b, hw, self.n_components)
         if normalized:
             for bi in range(b):
-                for i in range(3):
+                for i in range(self.n_components):
                     # min_max scaling
                     pca_features[bi, :, i] = (
                         pca_features[bi, :, i] - pca_features[bi, :, i].min()
