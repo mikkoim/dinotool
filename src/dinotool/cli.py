@@ -36,14 +36,37 @@ MODEL_SHORTCUTS = {
     "vit-b": "dinov2_vitb14_reg",
     "vit-l": "dinov2_vitl14_reg",
     "vit-g": "dinov2_vitg14_reg",
+
+    "dinov2-s": "dinov2_vits14_reg",
+    "dinov2-b": "dinov2_vitb14_reg",
+    "dinov2-l": "dinov2_vitl14_reg",
+    "dinov2-g": "dinov2_vitg14_reg",
+
+    "siglip1": "hf-hub:timm/ViT-B-16-SigLIP-i18n-256",
+
     "siglip2": "hf-hub:timm/ViT-B-16-SigLIP2-512",
     "siglip2-so400m-384": "hf-hub:timm/ViT-SO400M-16-SigLIP2-384",
     "siglip2-so400m-512": "hf-hub:timm/ViT-SO400M-16-SigLIP2-512",
     "siglip2-b16-256": "hf-hub:timm/ViT-B-16-SigLIP2-256",
     "siglip2-b16-512": "hf-hub:timm/ViT-B-16-SigLIP2-512",
     "siglip2-b32-256": "hf-hub:timm/ViT-B-32-SigLIP2-256",
-    "siglip2-b32-512": "hf-hub:timm/ViT-B-32-SigLIP2-512",
+
     "clip": "hf-hub:timm/vit_base_patch16_clip_224.openai",
+
+    "dinov3-s": "facebook/dinov3-vits16-pretrain-lvd1689m",
+    "dinov3-splus": "facebook/dinov3-vits16plus-pretrain-lvd1689m",
+    "dinov3-b": "facebook/dinov3-vitb16-pretrain-lvd1689m",
+    "dinov3-l": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "dinov3-hplus": "facebook/dinov3-vith16plus-pretrain-lvd1689m",
+    "dinov3-7b": "facebook/dinov3-vit7b16-pretrain-lvd1689m",
+    "dinov3-l-sat": "facebook/dinov3-vitl16-pretrain-sat493m",
+    "dinov3-7b-sat": "facebook/dinov3-vit7b16-pretrain-sat493m",
+
+    "radio-b": "NVlabs/RADIO/c-radio_v3-b",
+    "radio-l": "NVlabs/RADIO/c-radio_v3-l",
+    "radio-h": "NVlabs/RADIO/c-radio_v3-h",
+    "radio-g": "NVlabs/RADIO/c-radio_v3-g",
+
 }
 
 VALID_IMAGE_EXTENSIONS = (".jpg", ".png")

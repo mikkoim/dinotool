@@ -37,7 +37,12 @@ def load_model(model_name: str = "dinov2_vits14_reg") -> nn.Module:
     
     elif model_name.startswith("NVlabs/RADIO/"):
         model_version = model_name.split("/")[-1]
-        model = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_version)
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="warmup, rep, and use_cuda_graph parameters are deprecated.*",
+            )
+            model = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_version)
 
     else:
         with warnings.catch_warnings():
@@ -233,7 +238,7 @@ class RADIOFeatureExtractor(nn.Module):
 
         if return_clstoken:
             if normalized:
-                features = torch.nn.functional.normalize(global_feature, dim=-1)
+                global_feature = torch.nn.functional.normalize(global_feature, dim=-1)
             return global_feature
         
         feature_tensor = rearrange(

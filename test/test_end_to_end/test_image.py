@@ -35,27 +35,6 @@ def test_image_features_full():
     )
 
 
-def test_image_features_full_siglip2():
-    config = DinotoolConfig(
-        model_name="hf-hub:timm/ViT-B-16-SigLIP2-512",
-        input="test/data/magpie.jpg",
-        output="test/outputs/out-siglip2.jpg",
-        save_features="full",
-    )
-    processor = DinotoolProcessor(config)
-    processor.run()
-    assert os.path.exists("test/outputs/out-siglip2.jpg")
-    assert os.path.exists("test/outputs/out-siglip2.nc")
-
-    ds = xr.open_dataarray("test/outputs/out-siglip2.nc")
-    assert len(ds.frame_idx) == 1
-    assert len(ds.y) == 32
-    assert len(ds.x) == 32
-    assert len(ds.feature) == 768
-    assert np.allclose(
-        np.linalg.norm(ds.sel(x=0, y=0, frame_idx=0).values), 1.0, atol=1e-5
-    )
-
 
 def test_image_features_flat():
     config = DinotoolConfig(

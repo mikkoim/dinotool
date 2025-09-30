@@ -33,10 +33,10 @@ dependencies = [
     "pillow>=11.1.0",
     "pyarrow>=19.0.1",
     "scikit-learn>=1.6.1",
-    "torch>=2.6.0",
+    "torch>=2.8.0",
     "torchvision>=0.21.0",
     "tqdm>=4.67.1",
-    "transformers",
+    "transformers>=4.56.2",
     "xarray>=2025.3.1",
     "xformers>=0.0.29.post3 ; sys_platform == 'linux'",
     "zarr>=3.0.6",
@@ -44,7 +44,6 @@ dependencies = [
 
 [tool.uv.sources]
 xformers = { index = "xformers", marker = "sys_platform == 'linux'" }
-transformers = { git = "https://github.com/huggingface/transformers" }
 
 [project.urls]
 Homepage = "https://github.com/mikkoim/dinotool"
