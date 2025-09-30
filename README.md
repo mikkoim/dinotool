@@ -3,47 +3,60 @@
 
 # 🦕 DINOtool
 
-**DINOtool** is a command-line tool for extracting visual features from images and videos using modern vision models like DINOv2, CLIP, SigLIP2, and OpenCLIP/timm compatible models.
-It supports both **global (frame-level)** and **local (patch-level)** features, and can optionally visualize feature maps using PCA.
+**DINOtool** is a command-line tool for extracting visual features using state-of-the-art foundation models like DINOv3, DINOv2, CLIP, SigLIP2 and AM-RADIO.
+It supports the extraction **global (frame-level)** and **local (patch-level)** features from images, videos and image directories, and can optionally visualize feature maps using PCA.
 
+### Use from the command line
 ```bash
 pip install dinotool
 dinotool test.jpg -o out.jpg
 ```
 
-## ✨ Features
+### Use as a package:
+```python
+from dinotool import DinoToolModel
+from PIL import Image
+import matplotlib.pyplot as plt
+
+model = DinoToolModel("dinov3-s") # Unified API for multiple model backends
+img = Image.open("../test/data/bird1.jpg")
+transform = model.get_transform(img.size) # Loads model-specific transforms
+img_tensor = transform.transform(img).unsqueeze(0)
+
+local_features = model(img_tensor)
+local_features.tensor.shape # torch.Size([1, 56, 56, 384])
+
+global_features = model(img_tensor, features="frame")
+global_features.tensor.shape # torch.Size([1, 384])
+
+plt.imshow(model.pca(features)) # PCA visualization
+```
+
+# Features
 
 - Works with:
   - 📷 Single images
   - 🎞️ Video files
-  - 📁 Folders of images 
+  - 📁 Folders of images of various sizes and extensions
 
-- 🧠 Supports multiple model backends:
-  - DINOv2 (default)
-  - SigLIP2, CLIP, and any timm/OpenCLIP model
-
-- 💾 Outputs standard formats:
+- 💾 Outputs standard formats for downstream processing:
   - .parquet (flat/global features)
   - .zarr / .nc (spatial patch features)
   - .jpg / .mp4 with visualizations
 
-- 🌈 Optional PCA-based side-by-side visualizations
-- ⚡ Simple CLI with no coding required
+- 🌈 PCA-based visualizations for images and video
 
-## 👤 Who is DINOtool for?
-DINOtool is designed for:
+# Supported models
 
-- Researchers exploring vision models or needing feature extraction for experiments
+- [DINOv2](https://github.com/facebookresearch/dinov2)
+- [DINOv3](https://github.com/facebookresearch/dinov3) (Gated model - requires logging in to Hugginface Hub and applying access at [each model page](https://huggingface.co/collections/facebook/dinov3-68924841bd6b561778e31009))
+- [SigLIP](https://arxiv.org/abs/2303.15343)
+- [SigLIP 2](https://arxiv.org/abs/2502.14786)
+- [CLIP](https://github.com/openai/CLIP)
+- [AM-RADIO](https://github.com/NVlabs/RADIO)
 
-- Data scientists working with image/video datasets for tasks like clustering, retrieval, or classification
-
-- Developers who want to use DINO, CLIP, or SigLIP2 features without writing model code
-
-- Students and educators looking to visualize and understand patch-based ViT features
-
-- Anyone who wants to preprocess media into standardized visual features for downstream ML tasks — without building a custom pipeline
-
-## ✨Examples:
+List available models and their shortcuts with `dinotool --models`.
+# Examples:
 ```bash
 dinotool input.mp4 -o output.mp4
 ```
@@ -51,18 +64,17 @@ produces output:
 
 [Video example](https://github.com/user-attachments/assets/0cc2e7ed-15b5-4f38-97f4-afee9b62e445)
 
-DINOv2 accepts inputs of any size. The OpenCLIP/timm models resize the input. Here is an example of a 896x896 image:
+Changing the model with `--model-name/-m`:
 ```bash
-dinotool test/data/bird1.jpg -o dinov2.jpg --model-name vit-b # Shortcut to dinov2_vitb14_reg
-dinotool test/data/bird1.jpg -o siglip2.jpg --model-name siglip2 # Shortcut to hf-hub:timm/ViT-B-16-SigLIP2-512
+dinotool bird.jpg out.jpg --model-name dinov3-s
 ```
+uses a different foundation model to extract the features:
 
-produces outputs (DINOv2 / SigLIP2):
-
-![DINO_SigLIP2](docs/resources/combined_image.jpg)
+![DINO_SigLIP2](docs/resources/model_comparison.png)
 
 ### Global features for image folders:
 
+Feature vectors can be saved with `--save-features`.
 Processing image directories and extracting global or local features for each image is easy with DINOtool:
 
 ```bash
@@ -82,9 +94,11 @@ Similar files can be also produced for local patch features, for videos etc.
 
 ### More examples:
 
-More example commands can be found in [test/test_cases.md](test/test_cases.md)
+More example commands for different situations can be found in [test/test_cases.md](test/test_cases.md)
 
 Example of reading output file formats is in [docs/reading_outputs.ipynb](docs/reading_outputs.ipynb)
+
+Example of using DINOtool as a package is in [docs/api_example.ipynb](docs/api_example.ipynb)
 
 Example of PCA feature visualization by first masking objects using the first PCA features, similar to DINOv2 demos is in [docs/masked_pca_demo.ipynb](docs/masked_pca_demo.ipynb):
 
@@ -131,7 +145,7 @@ pip install dinotool
 ```
 
 ### Windows notes:
-- Windows is supported only for CPU usage. If you want GPU support on Windows, we recommend using WSL2 + Ubuntu.
+- Windows is supported only for CPU usage. If you want GPU support on Windows, we recommend using WSL2 + Ubuntu, or managing the environment yourself by first installing a GPU torch version and then dinotool.
 - The conda method above is recommended for Windows CPU setups.
 
 ## 🚀 Basic usage
@@ -223,7 +237,9 @@ The output is a side-by-side visualization with PCA of the patch-level features.
 
 ### `--model-name`
 
-By default, the value passed to this argument is loaded from `facebookresearch/dinov2`, meaning that the possible DINOv2 models are:
+List available models and their shortcuts with `dinotool --models`.
+
+By default, the value passed to `--model-name` argument is loaded from `facebookresearch/dinov2`, meaning that the possible DINOv2 models are:
 - `dinov2_vits14`
 - `dinov2_vitb14`
 - `dinov2_vitl14`
@@ -233,9 +249,20 @@ and their `reg` variants (recommended): i.e. `dinov2_vits14_reg`.
 
 See the [DINOv2 github repo](https://github.com/facebookresearch/dinov2) for more information.
 
+**DINOv3 models:**
+
+Model names with prefix `facebook/dinov3/<model name>` are downloaded from the DINOv3 respository in Huggingface Hub. See a list of available models [here](https://huggingface.co/collections/facebook/dinov3-68924841bd6b561778e31009).
+
+[!IMPORTANT]
+The DINOv3 models are gated models and need authorized access. You have to apply for access on the model page when logged in to Huggingface, and log in on the HF CLI: `hf auth login`.
+
+**AM-RADIO models:**
+
+Model names with prefix `NVlabs/RADIO/` are downloaded from the RADIO family of models. See all available models [here](https://github.com/NVlabs/RADIO)
+
 **OpenCLIP models:**
 
-DINOtool now supports also ViT models that follow the OpenCLIP/timm model API for feature extraction. These models are for example the [SigLIP2 models in Huggingface hub](https://huggingface.co/collections/timm/siglip-2-67b8e72ba08b09dd97aecaf9). Additionally, [other models](https://huggingface.co/models?library=open_clip&sort=trending&search=timm%2F) in the Hub should also work, but have not been fully tested. These include SigLIP and CLIP models.
+DINOtool supports also ViT models that follow the OpenCLIP/timm model API for feature extraction. These models are for example the [SigLIP2 models in Huggingface hub](https://huggingface.co/collections/timm/siglip-2-67b8e72ba08b09dd97aecaf9). Additionally, [other models](https://huggingface.co/models?library=open_clip&sort=trending&search=timm%2F) in the Hub should also work, but have not been fully tested. These include SigLIP and CLIP models.
 
 The OpenCLIP/timm model name has to be passed in the format `hf-hub:timm/<model name>`.
 
@@ -300,4 +327,7 @@ Options:
   --only-pca              Only visualize PCA features.
   --no-vis                Only output features with no visualization.
                           --save features must be set.
+  -f, --force             Force overwrite output file if it exists.
+  --models                List available models and their shortcuts.
+  --version               Show the version of DINOtool.
 ```
