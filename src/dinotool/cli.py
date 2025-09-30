@@ -69,6 +69,18 @@ MODEL_SHORTCUTS = {
 
 }
 
+class PrintModelsAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("Available model shortcuts:")
+        for shortcut, model in MODEL_SHORTCUTS.items():
+            print(f"  {shortcut} \t->\t{model}")
+        print("\nMost timm models from Huggingface Hub should work with the prefix 'hf-hub:timm/<model>'",
+              "\nMore information:",
+              "\n - DINOv2: https://github.com/facebookresearch/dinov2",
+              "\n - DINOv3: https://github.com/facebookresearch/dinov3",
+              "\n - RADIO: https://github.com/NVlabs/RADIO")
+        parser.exit()
+
 VALID_IMAGE_EXTENSIONS = (".jpg", ".png")
 VALID_VIDEO_EXTENSIONS = (".mp4", ".avi")
 VALID_OUTPUT_EXTENSIONS = VALID_IMAGE_EXTENSIONS + VALID_VIDEO_EXTENSIONS
@@ -241,6 +253,12 @@ class ArgumentParser:
             "-f",
             action="store_true",
             help="Force overwrite output file if it exists (default: False).",
+        )
+        parser.add_argument(
+            "--models",
+            action=PrintModelsAction,
+            nargs=0,
+            help="List available model shortcuts and exit.",
         )
 
         # Version
