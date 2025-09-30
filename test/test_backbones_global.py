@@ -11,10 +11,9 @@ import os
 import numpy as np
 import xarray as xr
 import pandas as pd
+from pathlib import Path
 
-
-if not os.path.exists("test/outputs/backbones-global"):
-    os.mkdir("test/outputs/backbones-global")
+Path("test/outputs/backbones-global").mkdir(parents=True, exist_ok=True)
 
 def run_backbone_test(name, f, input_size=None):
     out_path = f"test/outputs/backbones-global/{name}"

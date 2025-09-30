@@ -17,6 +17,10 @@ from torchvision.transforms.functional import pil_to_tensor
 import torch
 from einops import rearrange
 
+def get_PIL_extensions():
+    exts = Image.registered_extensions()
+    supported_extensions = {ex for ex, f in exts.items() if f in Image.OPEN}
+    return supported_extensions
 
 class LocalFeatures:
     def __init__(
@@ -183,7 +187,7 @@ class VideoDir:
             p
             for p in os.listdir(path)
             if os.path.splitext(p)[-1].lower()
-            in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
+            in get_PIL_extensions()
         ]
         frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
         self.frame_names = frame_names
@@ -305,7 +309,7 @@ class ImageDirectory:
             p
             for p in os.listdir(path)
             if os.path.splitext(p)[-1].lower()
-            in [".jpg", ".jpeg", ".png", ".bmp", ".tiff", ".webp"]
+            in get_PIL_extensions()
         ]
         self.image_names.sort()  # Sort images by name
         self.image_count = len(self.image_names)

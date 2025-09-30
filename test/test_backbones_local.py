@@ -10,6 +10,9 @@ from dinotool.cli import DinotoolConfig, DinotoolProcessor, MODEL_SHORTCUTS
 import os
 import numpy as np
 import xarray as xr
+from pathlib import Path
+
+Path("test/outputs/backbones").mkdir(parents=True, exist_ok=True)
 
 def assert_full_features(base_path, h, w, f):
     assert os.path.exists(f"{base_path}.jpg")
