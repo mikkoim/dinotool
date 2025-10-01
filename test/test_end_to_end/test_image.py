@@ -1,4 +1,4 @@
-from dinotool.cli import DinotoolConfig, DinotoolProcessor
+from dinotool.cli import DinotoolConfig, DinotoolProcessor, MODEL_SHORTCUTS
 from pathlib import Path
 import os
 import pandas as pd
@@ -6,12 +6,31 @@ import numpy as np
 import xarray as xr
 import pytest
 
+def run_backbone_test(name, input_size=None):
+    out_path = f"test/outputs/backbones/{name}"
+    model_name = MODEL_SHORTCUTS[name]
 
-def test_image_only():
-    config = DinotoolConfig(input="test/data/magpie.jpg", output="test/outputs/out.jpg")
+    config = DinotoolConfig(
+        model_name=model_name,
+        input="test/data/magpie.jpg",
+        output=f"{out_path}.jpg",
+        save_features="full",
+        input_size=input_size
+    )
     processor = DinotoolProcessor(config)
     processor.run()
-    assert os.path.exists("test/outputs/out.jpg")
+    assert os.path.exists(f"{out_path}.jpg")
+
+def test_smoke_dinov2():
+    run_backbone_test("vit-s", input_size=(64,64))
+def test_smoke_dinov3():
+    run_backbone_test("dinov3-s", input_size=(64,64))
+def test_smoke_siglip2():
+    run_backbone_test("siglip2", input_size=(64,64))
+def test_smoke_clip():
+    run_backbone_test("clip", input_size=(64,64))
+def test_smoke_radio():
+    run_backbone_test("radio-b", input_size=(64,64))
 
 
 def test_image_features_full():
