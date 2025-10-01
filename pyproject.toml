@@ -19,10 +19,11 @@ keywords = [
 classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
-requires-python = ">=3.11, <3.13"
+requires-python = ">=3.11"
 dependencies = [
     "accelerate>=1.10.0",
     "einops>=0.8.1",
@@ -33,7 +34,7 @@ dependencies = [
     "pillow>=11.1.0",
     "pyarrow>=19.0.1",
     "scikit-learn>=1.6.1",
-    "torch>=2.8.0",
+    "torch>=2.6.0",
     "torchvision>=0.21.0",
     "tqdm>=4.67.1",
     "transformers>=4.56.2",
