@@ -29,7 +29,7 @@ local_features.tensor.shape # torch.Size([1, 56, 56, 384])
 global_features = model(img_tensor, features="frame")
 global_features.tensor.shape # torch.Size([1, 384])
 
-plt.imshow(model.pca(features)) # PCA visualization
+plt.imshow(model.pca(local_features)) # PCA visualization
 ```
 
 # Features
