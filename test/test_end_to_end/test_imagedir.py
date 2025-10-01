@@ -5,6 +5,7 @@ import pandas as pd
 import numpy as np
 import xarray as xr
 
+N_FILES_IN_DIR = 5
 
 def test_imagedir_only():
     config = DinotoolConfig(input="test/data/imagefolder", output="test/outputs/if1")
@@ -13,7 +14,7 @@ def test_imagedir_only():
 
     output_dir = Path("test/outputs/if1")
     assert output_dir.exists()
-    assert len(list(output_dir.glob("*.jpg"))) == 4
+    assert len(list(output_dir.glob("*.jpg"))) == N_FILES_IN_DIR
 
 
 def test_imagedir_features_full():
@@ -25,8 +26,8 @@ def test_imagedir_features_full():
 
     output_dir = Path("test/outputs/if1")
     assert output_dir.exists()
-    assert len(list(output_dir.glob("*.jpg"))) == 4
-    assert len(list(output_dir.glob("*"))) == 8
+    assert len(list(output_dir.glob("*.jpg"))) == N_FILES_IN_DIR
+    assert len(list(output_dir.glob("*"))) == 2*N_FILES_IN_DIR
 
     ds = xr.open_dataarray("test/outputs/if1/bird1.nc")
     assert len(ds.frame_idx) == 1
@@ -49,8 +50,8 @@ def test_imagedir_features_flat():
 
     output_dir = Path("test/outputs/if1_flat")
     assert output_dir.exists()
-    assert len(list(output_dir.glob("*.jpg"))) == 4
-    assert len(list(output_dir.glob("*"))) == 8
+    assert len(list(output_dir.glob("*.jpg"))) == N_FILES_IN_DIR
+    assert len(list(output_dir.glob("*"))) == 2*N_FILES_IN_DIR
 
     df = pd.read_parquet("test/outputs/if1_flat/bird1.parquet")
     assert df.shape == (4096, 384)
@@ -69,7 +70,7 @@ def test_imagedir_features_frame():
     processor.run()
 
     df = pd.read_parquet("test/outputs/if1_frame.parquet")
-    assert df.shape == (4, 384)
+    assert df.shape == (N_FILES_IN_DIR, 384)
     assert df.index.names == ["filename"]
     assert set(df.index) == set(
         [x.name for x in Path("test/data/imagefolder").glob("*")]
@@ -93,7 +94,7 @@ def test_batched_imagedir_features_full():
 
     ds = xr.open_zarr("test/outputs/if1_b.zarr").to_dataarray()
 
-    assert len(ds.filename) == 4
+    assert len(ds.filename) == N_FILES_IN_DIR
     assert len(ds.y) == 19
     assert len(ds.x) == 34
     assert len(ds.feature) == 384
@@ -115,7 +116,7 @@ def test_batched_imagedir_features_flat():
     processor.run()
 
     df = pd.read_parquet("test/outputs/if1_flat_b.parquet")
-    assert df.shape == (2584, 384)
+    assert df.shape == (3230, 384)
     assert df.index.names == ["filename", "patch_idx"]
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
     assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
@@ -134,7 +135,7 @@ def test_batched_imagedir_features_frame():
     processor.run()
 
     df = pd.read_parquet("test/outputs/if1_frame_b.parquet")
-    assert df.shape == (4, 384)
+    assert df.shape == (N_FILES_IN_DIR, 384)
     assert df.index.names == ["filename"]
     assert set(df.index) == set(
         [x.name for x in Path("test/data/imagefolder").glob("*")]

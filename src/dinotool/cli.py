@@ -21,7 +21,9 @@ import dinotool
 from dinotool import data
 from dinotool.model import (
     DinoFeatureExtractor,
+    DinoV3FeatureExtractor,
     OpenCLIPFeatureExtractor,
+    RADIOFeatureExtractor,
     PCAModule,
     load_model,
 )
@@ -34,15 +36,50 @@ MODEL_SHORTCUTS = {
     "vit-b": "dinov2_vitb14_reg",
     "vit-l": "dinov2_vitl14_reg",
     "vit-g": "dinov2_vitg14_reg",
+
+    "dinov2-s": "dinov2_vits14_reg",
+    "dinov2-b": "dinov2_vitb14_reg",
+    "dinov2-l": "dinov2_vitl14_reg",
+    "dinov2-g": "dinov2_vitg14_reg",
+
+    "siglip1": "hf-hub:timm/ViT-B-16-SigLIP-i18n-256",
+
     "siglip2": "hf-hub:timm/ViT-B-16-SigLIP2-512",
     "siglip2-so400m-384": "hf-hub:timm/ViT-SO400M-16-SigLIP2-384",
     "siglip2-so400m-512": "hf-hub:timm/ViT-SO400M-16-SigLIP2-512",
     "siglip2-b16-256": "hf-hub:timm/ViT-B-16-SigLIP2-256",
     "siglip2-b16-512": "hf-hub:timm/ViT-B-16-SigLIP2-512",
     "siglip2-b32-256": "hf-hub:timm/ViT-B-32-SigLIP2-256",
-    "siglip2-b32-512": "hf-hub:timm/ViT-B-32-SigLIP2-512",
+
     "clip": "hf-hub:timm/vit_base_patch16_clip_224.openai",
+
+    "dinov3-s": "facebook/dinov3-vits16-pretrain-lvd1689m",
+    "dinov3-splus": "facebook/dinov3-vits16plus-pretrain-lvd1689m",
+    "dinov3-b": "facebook/dinov3-vitb16-pretrain-lvd1689m",
+    "dinov3-l": "facebook/dinov3-vitl16-pretrain-lvd1689m",
+    "dinov3-hplus": "facebook/dinov3-vith16plus-pretrain-lvd1689m",
+    "dinov3-7b": "facebook/dinov3-vit7b16-pretrain-lvd1689m",
+    "dinov3-l-sat": "facebook/dinov3-vitl16-pretrain-sat493m",
+    "dinov3-7b-sat": "facebook/dinov3-vit7b16-pretrain-sat493m",
+
+    "radio-b": "NVlabs/RADIO/c-radio_v3-b",
+    "radio-l": "NVlabs/RADIO/c-radio_v3-l",
+    "radio-h": "NVlabs/RADIO/c-radio_v3-h",
+    "radio-g": "NVlabs/RADIO/c-radio_v3-g",
+
 }
+
+class PrintModelsAction(argparse.Action):
+    def __call__(self, parser, namespace, values, option_string=None):
+        print("Available model shortcuts:")
+        for shortcut, model in MODEL_SHORTCUTS.items():
+            print(f"  {shortcut} \t->\t{model}")
+        print("\nMost timm models from Huggingface Hub should work with the prefix 'hf-hub:timm/<model>'",
+              "\nMore information:",
+              "\n - DINOv2: https://github.com/facebookresearch/dinov2",
+              "\n - DINOv3: https://github.com/facebookresearch/dinov3",
+              "\n - RADIO: https://github.com/NVlabs/RADIO")
+        parser.exit()
 
 VALID_IMAGE_EXTENSIONS = (".jpg", ".png")
 VALID_VIDEO_EXTENSIONS = (".mp4", ".avi")
@@ -216,6 +253,12 @@ class ArgumentParser:
             "-f",
             action="store_true",
             help="Force overwrite output file if it exists (default: False).",
+        )
+        parser.add_argument(
+            "--models",
+            action=PrintModelsAction,
+            nargs=0,
+            help="List available model shortcuts and exit.",
         )
 
         # Version
@@ -451,12 +494,16 @@ class ExtractorFactory:
     def create_extractor(
         model_name: str,
         model: torch.nn.Module,
-        input_size: Optional[Tuple[int, int]] = None,
         device: str = "cuda",
     ) -> DinoFeatureExtractor:
         """Create appropriate feature extractor based on model name."""
         if model_name.startswith("hf-hub:timm"):
             return OpenCLIPFeatureExtractor(model, device=device)
+        
+        elif model_name.startswith("facebook/dinov3"):
+            return DinoV3FeatureExtractor(model, device=device)
+        elif model_name.startswith("NVlabs/RADIO/"):
+            return RADIOFeatureExtractor(model, device=device)
         else:
             return DinoFeatureExtractor(model, device=device)
 
@@ -531,7 +578,6 @@ class DinotoolProcessor:
         extractor = ExtractorFactory.create_extractor(
             model_name=self.config.model_name,
             model=model,
-            input_size=input_data.input_size,
             device=self.device,
         )
 
@@ -692,7 +738,6 @@ class DinotoolProcessor:
 
         except KeyboardInterrupt:
             print("Keyboard interrupt detected. Cleaning up...")
-            progbar.close()
             raise
 
     def _process_image_directory(
@@ -748,6 +793,142 @@ class DinotoolProcessor:
                 print(f"Saved features to {out_path}{extension}")
             progbar.update(1)
 
+
+
+# public API classes
+class DinoToolModel:
+    """A high-level interface for feature extraction and visualization with DINOtool
+    
+    Args:
+        model_name (str): Model name or shortcut to use. Default is "dinov2_vits14_reg".
+        device (str, optional): Device to use ("cuda" or "cpu"). Defaults to None, which selects "cuda" if available.
+        verbose (bool): Whether to print model and device information. Default is True.
+    Attributes:
+        model_name (str): The full model name being used.
+        device (str): The device being used.
+        model (torch.nn.Module): The loaded model.
+        extractor (DinoFeatureExtractor): The feature extractor.
+        transform_factory (data.TransformFactory): Factory for input transformations.
+    Methods:
+        __call__(input, features="full", normalized=True): Extract features from input tensor.
+        get_transform(input_size): Get the appropriate input transformation for a given size.
+        pca(features, n_components=3): Apply PCA to local features and return the transformed array.    
+    Example:
+    """
+    def __init__(self, model_name: str = "dinov2_vits14_reg", device: Optional[str] = None, verbose: bool = True):
+        """Initialize DinoToolModel with specified model and device.
+        
+        Args:
+            model_name (str): Model name or shortcut to use. Default is "dinov2_vits14_reg".
+            device (str, optional): Device to use ("cuda" or "cpu"). Defaults to None, which selects "cuda" if available.
+            verbose (bool): Whether to print model and device information. Default is True.
+        """
+        if model_name in MODEL_SHORTCUTS:
+            self.model_name_shortcut = model_name
+            if verbose:
+                print(
+                    f"Using model shortcut: {model_name} -> {MODEL_SHORTCUTS[model_name]}"
+                )
+            model_name = MODEL_SHORTCUTS[model_name]
+        else:
+            self.model_name_shortcut = None
+        self.model_name = model_name
+
+        if device is None:
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+        else:
+            self.device = device
+
+        self.model = load_model(self.model_name).to(self.device)
+
+        if verbose:
+            print(f"Using model: {self.model_name} on device: {self.device}")
+        
+        self.extractor = ExtractorFactory.create_extractor(
+            model_name=self.model_name,
+            model=self.model,
+            device=self.device,
+        )
+
+        self.transform_factory = data.TransformFactory(model_name=self.model_name, patch_size=self.model.patch_size)
+    
+    def __repr__(self) -> str:
+        return f"DinoToolModel(model_name='{self.model_name}', device='{self.device}')"
+    
+    def __call__(self, input: torch.Tensor, features: Literal["full", "flat", "frame"] = "full", normalized: bool = True) -> data.LocalFeatures:
+        """Extract features from input tensor.
+        Args:
+            input (torch.Tensor): Input tensor of shape (B, C, H, W).
+            features (str): Type of features to extract ("full", "flat", or "frame
+). Default is "full".
+            normalized (bool): Whether to return normalized features. Default is True.
+        Returns:
+            data.LocalFeatures: Extracted features.
+        Example:
+            >>> from dinotool import DinoToolModel
+            >>> from PIL import Image
+            >>> model = DinoToolModel("dinov2_vits14_reg")
+            >>> transform = model.get_transform((224, 224))
+            >>> img = transform(Image.open("path/to/image.jpg")).unsqueeze(0)
+            >>> features = model(img, features="full")
+        """
+        if features == "frame":
+            return self.extractor(input, return_clstoken=True, normalized=normalized)
+        if features == "flat":
+            flattened = True
+        else:
+            flattened = False
+        return self.extractor(input, flattened=flattened, normalized=normalized)
+    
+    def get_transform(self, input_size: Tuple[int, int]) -> torch.nn.Module:
+        """Get the appropriate input transformation for a given size.
+        Args:
+            input_size (Tuple[int, int]): Desired input size (W, H).
+        Returns:
+            torch.nn.Module: Transformation module.
+        Example:
+            >>> from dinotool import DinoToolModel
+            >>> from PIL import Image
+            >>> model = DinoToolModel("dinov2_vits14_reg")
+            >>> transform = model.get_transform((224, 224))
+        """
+        return self.transform_factory.get_transform(input_size)
+    
+    def pca(self, features: data.LocalFeatures, n_components: int = 3) -> np.ndarray:
+        """Apply PCA to local features and return the transformed array.
+        Args:
+            features (dinotool.data.LocalFeatures): Local features to apply PCA on.
+            n_components (int): Number of PCA components to retain. Default is 3.
+        Returns:
+            np.ndarray: PCA transformed features.
+        Example:
+            >>> from dinotool import DinoToolModel
+            >>> from PIL import Image
+            >>> model = DinoToolModel("dinov2_vits14_reg")
+            >>> transform = model.get_transform((224, 224))
+            >>> img = transform(Image.open("path/to/image.jpg")).unsqueeze(0)
+            >>> features = model(img)
+            >>> pca_features = model.pca(features, n_components=3)
+        """
+        pca = PCAModule(n_components=n_components,
+                        feature_map_size=(features.w, features.h))
+        pca.fit(features.flat().tensor, verbose=False)
+        pca_array = pca.transform(features.flat().tensor, flattened=False)
+        if pca_array.shape[0] == 1:
+            pca_array = pca_array[0]
+        return pca_array
+    
+    @classmethod
+    def available_models(cls) -> Dict[str, str]:
+        """Get available model shortcuts.
+        Returns:
+            Dict[str, str]: Dictionary of model shortcuts and their full names.
+        Example:
+            >>> from dinotool import DinoToolModel
+            >>> model = DinoToolModel()
+            >>> print(model.available_models)
+        """
+        return MODEL_SHORTCUTS
 
 def main() -> None:
     """Main entry point."""

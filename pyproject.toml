@@ -1,6 +1,6 @@
 [project]
 name = "dinotool"
-version = "0.2.2"
+version = "0.3.0"
 description = "Command-line tool for extracting DINO, CLIP and SigLIP features from images and videos"
 readme = "README.md"
 authors = [
@@ -19,11 +19,13 @@ keywords = [
 classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "License :: OSI Approved :: Apache Software License",
     "Operating System :: OS Independent",
 ]
-requires-python = ">=3.11, <3.13"
+requires-python = ">=3.11"
 dependencies = [
+    "accelerate>=1.10.0",
     "einops>=0.8.1",
     "h5py>=3.13.0",
     "numpy>=2.0.0",
@@ -35,6 +37,7 @@ dependencies = [
     "torch>=2.6.0",
     "torchvision>=0.21.0",
     "tqdm>=4.67.1",
+    "transformers>=4.56.2",
     "xarray>=2025.3.1",
     "xformers>=0.0.29.post3 ; sys_platform == 'linux'",
     "zarr>=3.0.6",
