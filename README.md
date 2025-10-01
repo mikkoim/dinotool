@@ -40,9 +40,8 @@ plt.imshow(model.pca(features)) # PCA visualization
   - 📁 Folders of images of various sizes and extensions
 
 - 💾 Outputs standard formats for downstream processing:
-  - .parquet (flat/global features)
-  - .zarr / .nc (spatial patch features)
-  - .jpg / .mp4 with visualizations
+  - .parquet (global features / local features in a list)
+  - .zarr / .nc (local features in 2D)
 
 - 🌈 PCA-based visualizations for images and video
 
