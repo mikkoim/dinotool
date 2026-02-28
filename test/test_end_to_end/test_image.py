@@ -87,3 +87,92 @@ def test_image_features_frame():
     df = pd.read_csv("test/outputs/out.txt", header=None)
     assert df.shape == (1, 384)
     assert np.allclose(np.linalg.norm(df.values), 1.0, atol=1e-5)
+
+
+def test_image_no_vis_flat():
+    config = DinotoolConfig(
+        input="test/data/magpie.jpg",
+        output="test/outputs/novis_flat",
+        save_features="flat",
+        no_vis=True,
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    assert os.path.exists("test/outputs/novis_flat.parquet")
+    assert not os.path.exists("test/outputs/novis_flat.jpg")
+
+    df = pd.read_parquet("test/outputs/novis_flat.parquet")
+    assert df.shape == (910, 384)
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
+
+
+def test_image_no_vis_frame():
+    config = DinotoolConfig(
+        input="test/data/magpie.jpg",
+        output="test/outputs/novis_frame",
+        save_features="frame",
+        no_vis=True,
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    assert os.path.exists("test/outputs/novis_frame.txt")
+
+
+def test_image_only_pca():
+    config = DinotoolConfig(
+        input="test/data/magpie.jpg",
+        output="test/outputs/only_pca.jpg",
+        only_pca=True,
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    assert os.path.exists("test/outputs/only_pca.jpg")
+    from PIL import Image
+    img = Image.open("test/outputs/only_pca.jpg")
+    # only_pca produces just the PCA image, not the stacked original+PCA
+    w, h = img.size
+    # Should be a single image (not double height from stacking)
+    assert h < 400  # original magpie is ~370px tall; stacked would be ~740
+
+
+def test_image_with_input_size():
+    config = DinotoolConfig(
+        input="test/data/magpie.jpg",
+        output="test/outputs/resized.jpg",
+        save_features="full",
+        input_size=(224, 224),
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    assert os.path.exists("test/outputs/resized.jpg")
+    assert os.path.exists("test/outputs/resized.nc")
+
+    ds = xr.open_dataarray("test/outputs/resized.nc")
+    # 224/14 = 16 patches in each dimension
+    assert len(ds.y) == 16
+    assert len(ds.x) == 16
+    assert len(ds.feature) == 384
+
+
+def test_image_png_input():
+    config = DinotoolConfig(
+        input="test/data/pepper.png",
+        output="test/outputs/pepper_out.jpg",
+        save_features="full",
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    assert os.path.exists("test/outputs/pepper_out.jpg")
+    assert os.path.exists("test/outputs/pepper_out.nc")
+
+    ds = xr.open_dataarray("test/outputs/pepper_out.nc")
+    assert len(ds.frame_idx) == 1
+    assert len(ds.feature) == 384
+    assert np.allclose(
+        np.linalg.norm(ds.sel(x=0, y=0, frame_idx=0).values), 1.0, atol=1e-5
+    )
