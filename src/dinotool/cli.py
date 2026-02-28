@@ -9,7 +9,7 @@ import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -381,112 +381,6 @@ class FeatureSaver:
             file.rename(Path(output_name) / f"part.{idx}.parquet")
 
 
-class FrameLevelProcessor:
-    """Handles frame-level feature extraction."""
-
-    def __init__(self, extractor: DinoFeatureExtractor):
-        self.extractor = extractor
-
-    def process(self, input_data: data.InputData, output_path_base: str) -> None:
-        """
-        Handle frame-level/global feature extraction and saving for various input types.
-        output_path_base will be used to construct the final output file(s).
-        """
-        input_type = input_data.input_type
-        data = input_data.data
-
-        if input_type == "single_image":
-            tensor = data
-            global_features = self.extractor(tensor, return_clstoken=True).cpu().numpy()
-            np.savetxt(f"{output_path_base}.txt", global_features, delimiter=",")
-            print(f"Saved frame features to {output_path_base}.txt")
-
-        elif input_type in ["video_file", "video_dir"]:
-            print(
-                "Extracting frame-level features from video. This does not produce a video output."
-            )
-            tmpdir = Path(f"temp_dinotool_frames-{uuid.uuid4()}")
-            tmpdir.mkdir()
-
-            try:
-                self._extract_frame_features_from_iterable(data, tmpdir)
-                FeatureSaver._combine_parquet_files(
-                    tmpdir, f"{output_path_base}.parquet"
-                )
-            finally:
-                self._cleanup_temp_dir(tmpdir)
-            print(f"Saved frame features to {output_path_base}.parquet")
-
-        elif input_type == "image_directory":
-            print(
-                "Extracting frame-level features from image directory for single parquet output."
-            )
-
-            all_features_dfs = []
-            progbar = tqdm(total=len(input_data.source))
-            for batch in data:
-                filename = batch["filename"]
-
-                global_features = (
-                    self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
-                )
-
-                columns = [f"feature_{i}" for i in range(global_features.shape[1])]
-                # Create DataFrame for current image's features, using filename_stem as index
-                df = pd.DataFrame(global_features, index=[filename], columns=columns)
-
-                df.index.set_names(["filename"], inplace=True)
-                all_features_dfs.append(df)
-
-                progbar.set_description(f"Processed {filename}")
-                progbar.update(len(batch["img"]))
-            progbar.close()
-
-            # Concatenate all DataFrames and save to a single parquet file
-            if all_features_dfs:
-                combined_df = pd.concat(all_features_dfs, axis=0)
-
-                final_output_path = Path(output_path_base).with_suffix(".parquet")
-                combined_df.to_parquet(final_output_path)
-                print(f"Saved combined frame features to {final_output_path}")
-            else:
-                print(
-                    "No images found or processed in the directory to save frame features."
-                )
-        else:
-            raise ValueError(
-                f"Unsupported input type for frame-level features: {input_type}"
-            )
-
-    def _extract_frame_features_from_iterable(
-        self, data_iterable: object, tmpdir: Path
-    ) -> None:
-        """Extract features from an iterable (e.g., video loader) into temporary files."""
-        progbar = tqdm(total=len(data_iterable))
-
-        try:
-            for idx, batch in enumerate(data_iterable):
-                global_features = (
-                    self.extractor(batch["img"], return_clstoken=True).cpu().numpy()
-                )
-                frame_idx = batch["frame_idx"].cpu().numpy()
-
-                columns = [f"feature_{i}" for i in range(global_features.shape[1])]
-                df = pd.DataFrame(global_features, index=frame_idx, columns=columns)
-                df.to_parquet(tmpdir / f"{idx:05d}.parquet")
-
-                progbar.update(1)
-        except KeyboardInterrupt:
-            print("Keyboard interrupt detected. Cleaning up...")
-            progbar.close()
-            raise
-
-    @staticmethod
-    def _cleanup_temp_dir(tmpdir: Path) -> None:
-        """Clean up temporary directory."""
-        shutil.rmtree(tmpdir, ignore_errors=True)
-
-
 class ExtractorFactory:
     """Factory for creating feature extractors."""
 
@@ -581,217 +475,267 @@ class DinotoolProcessor:
             device=self.device,
         )
 
-        # Handle frame-level features
-        if self.config.save_features == "frame":
-            processor = FrameLevelProcessor(extractor)
-            output_path = Path(self.config.output).with_suffix("")
-            processor.process(input_data, str(output_path))
-            return
-
-        if input_data.input_type in ["video_dir", "video_file"]:
-            self._process_video(input_data, extractor)
-        elif input_data.input_type == "single_image":
-            self._process_image(input_data, extractor)
-        elif (
-            input_data.input_type == "image_directory"
-            and self.config.input_size is not None
-        ):
-            # process image directory with specified input size
-            self._process_video(input_data, extractor)
-        elif input_data.input_type == "image_directory":
-            self._process_image_directory(input_data, extractor)
+        # Route to appropriate processing method
+        if input_data.input_type == "single_image":
+            self._process_single_image(input_data, extractor)
+        elif input_data.input_type == "image_directory" and self.config.input_size is None:
+            self._process_per_image(input_data, extractor)
         else:
-            raise ValueError(f"Unsupported input type: {input_data.input_type}")
+            # video_file, video_dir, image_directory with input_size
+            self._process_batched(input_data, extractor)
 
-    def _process_image(
+    @staticmethod
+    def _setup_pca(
+        extractor: DinoFeatureExtractor,
+        dataloader,
+        feature_map_size: Tuple[int, int],
+    ) -> PCAModule:
+        """Fit PCA on the first batch of a dataloader."""
+        first_batch = next(iter(dataloader))
+        pca = PCAModule(n_components=3, feature_map_size=feature_map_size)
+        first_features = extractor(first_batch["img"])
+        pca.fit(first_features.flat().tensor)
+        return pca
+
+    def _process_single_image(
         self, input_data: data.InputData, extractor: DinoFeatureExtractor
     ) -> None:
         """Process a single image."""
-        batch = {"img": input_data.data}
-        features = extractor(batch["img"])
+        needs_global = self.config.save_features == "frame"
+        needs_local = self.config.save_features in ["full", "flat"] or (not self.config.no_vis and not needs_global)
 
         Path(self.config.output).parent.mkdir(parents=True, exist_ok=True)
+        output_stem = Path(self.config.output).with_suffix("")
 
-        # Setup PCA
-        if not self.config.no_vis:
-            pca = PCAModule(
-                n_components=3, feature_map_size=input_data.feature_map_size
-            )
-            pca.fit(features.flat().tensor)
-            pca_array = pca.transform(features.flat().tensor, flattened=False)[0]
-        else:
-            pca_array = None
+        if needs_global:
+            global_features = extractor(input_data.data, return_clstoken=True).cpu().numpy()
+            np.savetxt(f"{output_stem}.txt", global_features, delimiter=",")
+            print(f"Saved frame features to {output_stem}.txt")
 
-        # Create frame data
-        frame = data.FrameData(
-            img=input_data.source,
-            features=features,
-            pca=pca_array,  # PCA features if visualization is enabled
-            frame_idx=0,
-        )
+        if needs_local:
+            features = extractor(input_data.data)
 
-        # Save visualization
-        if not self.config.no_vis:
-            out_img = frame_visualizer(
-                frame, output_size=input_data.input_size, only_pca=self.config.only_pca
-            )
-            out_img.save(self.config.output)
-            print(f"Saved visualization to {self.config.output}")
+            if not self.config.no_vis:
+                pca = PCAModule(
+                    n_components=3, feature_map_size=input_data.feature_map_size
+                )
+                pca.fit(features.flat().tensor)
+                pca_array = pca.transform(features.flat().tensor, flattened=False)[0]
+            else:
+                pca_array = None
 
-        # Save features
-        if self.config.save_features:
-            output_stem = Path(self.config.output).with_suffix("")
-            FeatureSaver.save_batch_features(
-                [frame], method=self.config.save_features, output=str(output_stem)
+            frame = data.FrameData(
+                img=input_data.source,
+                features=features,
+                pca=pca_array,
+                frame_idx=0,
             )
 
-            extension = ".nc" if self.config.save_features == "full" else ".parquet"
-            print(f"Saved features to {output_stem}{extension}")
+            if not self.config.no_vis:
+                out_img = frame_visualizer(
+                    frame, output_size=input_data.input_size, only_pca=self.config.only_pca
+                )
+                out_img.save(self.config.output)
+                print(f"Saved visualization to {self.config.output}")
 
-    def _process_video(
+            if self.config.save_features:
+                FeatureSaver.save_batch_features(
+                    [frame], method=self.config.save_features, output=str(output_stem)
+                )
+                extension = ".nc" if self.config.save_features == "full" else ".parquet"
+                print(f"Saved features to {output_stem}{extension}")
+
+    def _process_batched(
         self, input_data: data.InputData, extractor: DinoFeatureExtractor
     ) -> None:
-        """Process a video."""
-        # Setup PCA
-        if not self.config.no_vis:
-            first_batch = next(iter(input_data.data))
-            pca = PCAModule(
-                n_components=3, feature_map_size=input_data.feature_map_size
-            )
-            first_features = extractor(first_batch["img"])
-            pca.fit(first_features.flat().tensor)
+        """Process batched input (video file, video dir, or image directory with fixed input size)."""
+        needs_global = self.config.save_features == "frame"
+        needs_local = self.config.save_features in ["full", "flat"] or (not self.config.no_vis and not needs_global)
+
+        # Setup PCA for local features
+        if needs_local and not self.config.no_vis:
+            pca = self._setup_pca(extractor, input_data.data, input_data.feature_map_size)
         else:
             pca = None
 
-        # Setup output paths
+        # Setup output paths for local features
         feature_out_name = None
-        if self.config.save_features:
+        if needs_local and self.config.save_features:
             extension = ".zarr" if self.config.save_features == "full" else ".parquet"
             feature_out_name = Path(self.config.output).with_suffix(extension)
 
-        # Process video
+        # Process batches
         progbar = tqdm(total=len(input_data.source))
-        batch_handler = BatchHandler(
-            input_data.source, extractor, pca, progress_bar=progbar
-        )
         tmpdir = f"temp_dinotool_frames-{uuid.uuid4()}"
         os.mkdir(tmpdir)
 
-        try:
-            self._process_video_batches(
-                input_data, batch_handler, tmpdir, feature_out_name
+        if needs_local:
+            batch_handler = BatchHandler(
+                input_data.source, extractor, pca, progress_bar=progbar
             )
 
-            # Create output video
-            if not self.config.no_vis:
+        try:
+            self._process_batched_loop(
+                input_data, extractor, tmpdir,
+                batch_handler=batch_handler if needs_local else None,
+                needs_local=needs_local, needs_global=needs_global,
+                progbar=progbar,
+            )
+
+            # Create output video (only for video inputs with visualization)
+            if needs_local and not self.config.no_vis:
                 try:
                     framerate = input_data.source.framerate
                 except (ValueError, AttributeError):
                     framerate = 30
-
                 create_video_from_frames(tmpdir, self.config.output, framerate)
 
-            # Combine features
-            if self.config.save_features:
+            # Combine local features
+            if needs_local and self.config.save_features:
                 FeatureSaver.combine_frame_features(
                     method=self.config.save_features,
                     tmpdir=tmpdir,
                     feature_out_name=str(feature_out_name),
                 )
 
+            # Combine global features
+            if needs_global:
+                output_stem = Path(self.config.output).with_suffix("")
+                FeatureSaver._combine_parquet_files(
+                    tmpdir, f"{output_stem}.parquet"
+                )
+                print(f"Saved frame features to {output_stem}.parquet")
+
         finally:
-            # Cleanup
             shutil.rmtree(tmpdir, ignore_errors=True)
 
-    def _process_video_batches(
+    def _process_batched_loop(
         self,
         input_data: data.InputData,
-        batch_handler: BatchHandler,
+        extractor: DinoFeatureExtractor,
         tmpdir: str,
-        feature_out_name: Optional[Path],
+        batch_handler: Optional[BatchHandler],
+        needs_local: bool,
+        needs_global: bool,
+        progbar,
     ) -> None:
-        """Process video batches."""
+        """Inner loop for batched processing."""
         try:
             idx = 0
             for batch in input_data.data:
-                batch_frames = batch_handler(batch)
+                if needs_local:
+                    batch_frames = batch_handler(batch)
 
-                # Save visualization frames
-                if not self.config.no_vis:
-                    for frame in batch_frames:
-                        out_img = frame_visualizer(
-                            frame,
-                            output_size=input_data.input_size,
-                            only_pca=self.config.only_pca,
+                    # Save visualization frames
+                    if not self.config.no_vis:
+                        for frame in batch_frames:
+                            out_img = frame_visualizer(
+                                frame,
+                                output_size=input_data.input_size,
+                                only_pca=self.config.only_pca,
+                            )
+                            out_img.save(f"{tmpdir}/{frame.frame_idx:05d}.jpg")
+
+                    # Save local features
+                    if self.config.save_features:
+                        output_path = f"{tmpdir}/{idx:05d}"
+                        FeatureSaver.save_batch_features(
+                            batch_frames,
+                            method=self.config.save_features,
+                            output=output_path,
                         )
-                        out_img.save(f"{tmpdir}/{frame.frame_idx:05d}.jpg")
 
-                # Save features
-                if self.config.save_features:
-                    output_path = f"{tmpdir}/{idx:05d}"
-                    FeatureSaver.save_batch_features(
-                        batch_frames,
-                        method=self.config.save_features,
-                        output=output_path,
+                if needs_global:
+                    global_features = (
+                        extractor(batch["img"], return_clstoken=True).cpu().numpy()
                     )
+                    if "frame_idx" in batch:
+                        frame_idx = batch["frame_idx"].cpu().numpy()
+                        columns = [f"feature_{i}" for i in range(global_features.shape[1])]
+                        df = pd.DataFrame(global_features, index=frame_idx, columns=columns)
+                    else:
+                        filename = batch["filename"]
+                        columns = [f"feature_{i}" for i in range(global_features.shape[1])]
+                        df = pd.DataFrame(global_features, index=[filename], columns=columns)
+                        df.index.set_names(["filename"], inplace=True)
+                    df.to_parquet(Path(tmpdir) / f"{idx:05d}.parquet")
+                    progbar.update(len(batch["img"]))
+
                 idx += 1
 
         except KeyboardInterrupt:
             print("Keyboard interrupt detected. Cleaning up...")
             raise
 
-    def _process_image_directory(
+    def _process_per_image(
         self, input_data: data.InputData, extractor: DinoFeatureExtractor
     ) -> None:
-        """Process a directory of images. Supports only batch size of 1."""
+        """Process a directory of images one at a time (variable sizes). Batch size 1."""
+        needs_global = self.config.save_features == "frame"
+        needs_local = self.config.save_features in ["full", "flat"] or (not self.config.no_vis and not needs_global)
+
         out_dir = Path(self.config.output)
         out_dir.mkdir(parents=True, exist_ok=True)
 
+        all_global_dfs = []
         progbar = tqdm(total=len(input_data.source))
         for batch in input_data.data:
             filename = batch["filename"][0]
             filename_stem = Path(filename).stem
 
-            # Adapt extractor input size dynamically for each image in the directory
             feature_map_size = tuple(x.item() for x in batch["feature_map_size"])
             input_size = extractor.patch_size * np.array(feature_map_size)
             progbar.set_description(f"Processing {filename}. Input size: {input_size}")
 
-            features = extractor(batch["img"])
-            if not self.config.no_vis:
-                pca = PCAModule(n_components=3, feature_map_size=feature_map_size)
-                pca.fit(features.flat().tensor, verbose=False)
-                pca_array = pca.transform(features.flat().tensor, flattened=False)[0]
-            else:
-                pca = None
-                pca_array = None
-
-            frame = data.FrameData(
-                img=input_data.source.get_by_name(filename),
-                features=features.full()[0],
-                frame_idx=0,
-                pca=pca_array,  # PCA features if visualization is enabled
-            )
-
-            # Save visualization
-            if not self.config.no_vis:
-                out_img = frame_visualizer(
-                    frame, output_size=input_size, only_pca=self.config.only_pca
+            if needs_global:
+                global_features = (
+                    extractor(batch["img"], return_clstoken=True).cpu().numpy()
                 )
-                out_img_path = os.path.join(self.config.output, f"{filename_stem}.jpg")
-                out_img.save(out_img_path)
+                columns = [f"feature_{i}" for i in range(global_features.shape[1])]
+                df = pd.DataFrame(global_features, index=[filename], columns=columns)
+                df.index.set_names(["filename"], inplace=True)
+                all_global_dfs.append(df)
 
-            # Save features
-            if self.config.save_features:
-                output_stem = Path(self.config.output).with_suffix("")
-                out_path = os.path.join(str(output_stem), f"{filename_stem}")
-                FeatureSaver.save_batch_features(
-                    [frame], method=self.config.save_features, output=out_path
+            if needs_local:
+                features = extractor(batch["img"])
+                if not self.config.no_vis:
+                    pca = PCAModule(n_components=3, feature_map_size=feature_map_size)
+                    pca.fit(features.flat().tensor, verbose=False)
+                    pca_array = pca.transform(features.flat().tensor, flattened=False)[0]
+                else:
+                    pca_array = None
+
+                frame = data.FrameData(
+                    img=input_data.source.get_by_name(filename),
+                    features=features.full()[0],
+                    frame_idx=0,
+                    pca=pca_array,
                 )
 
-                extension = ".nc" if self.config.save_features == "full" else ".parquet"
-                print(f"Saved features to {out_path}{extension}")
+                if not self.config.no_vis:
+                    out_img = frame_visualizer(
+                        frame, output_size=input_size, only_pca=self.config.only_pca
+                    )
+                    out_img_path = os.path.join(self.config.output, f"{filename_stem}.jpg")
+                    out_img.save(out_img_path)
+
+                if self.config.save_features:
+                    output_stem = Path(self.config.output).with_suffix("")
+                    out_path = os.path.join(str(output_stem), f"{filename_stem}")
+                    FeatureSaver.save_batch_features(
+                        [frame], method=self.config.save_features, output=out_path
+                    )
+                    extension = ".nc" if self.config.save_features == "full" else ".parquet"
+                    print(f"Saved features to {out_path}{extension}")
+
             progbar.update(1)
+
+        # Save combined global features
+        if needs_global and all_global_dfs:
+            combined_df = pd.concat(all_global_dfs, axis=0)
+            final_output_path = Path(self.config.output).with_suffix(".parquet")
+            combined_df.to_parquet(final_output_path)
+            print(f"Saved combined frame features to {final_output_path}")
 
 
 
