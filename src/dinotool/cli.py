@@ -237,9 +237,10 @@ class ArgumentParser:
             "-s",
             type=str,
             default=None,
-            choices=["full", "flat", "frame"],
+            choices=["full", "flat", "frame", "all"],
             help="Save features to file (netCDF for images, zarr for videos)."
-            " 'full' saves local features with spatial information, 'flat' saves local flattened features, 'frame' saves global frame-level features.",
+            " 'full' saves local features with spatial information, 'flat' saves local flattened features,"
+            " 'frame' saves global frame-level features, 'all' saves both flat local and global frame features.",
         )
 
         # Output arguments
@@ -450,6 +451,10 @@ class DinotoolProcessor:
         self.config = config
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
 
+    @property
+    def _local_save_method(self) -> str:
+        return "flat" if self.config.save_features == "all" else self.config.save_features
+
     def run(self) -> None:
         """Run the main processing pipeline."""
         # Load model and setup
@@ -501,8 +506,8 @@ class DinotoolProcessor:
         self, input_data: data.InputData, extractor: DinoFeatureExtractor
     ) -> None:
         """Process a single image."""
-        needs_global = self.config.save_features == "frame"
-        needs_local = self.config.save_features in ["full", "flat"] or (not self.config.no_vis and not needs_global)
+        needs_global = self.config.save_features in ["frame", "all"]
+        needs_local = self.config.save_features in ["full", "flat", "all"] or (not self.config.no_vis and not needs_global)
 
         Path(self.config.output).parent.mkdir(parents=True, exist_ok=True)
         output_stem = Path(self.config.output).with_suffix("")
@@ -540,17 +545,17 @@ class DinotoolProcessor:
 
             if self.config.save_features:
                 FeatureSaver.save_batch_features(
-                    [frame], method=self.config.save_features, output=str(output_stem)
+                    [frame], method=self._local_save_method, output=str(output_stem)
                 )
-                extension = ".nc" if self.config.save_features == "full" else ".parquet"
+                extension = ".nc" if self._local_save_method == "full" else ".parquet"
                 print(f"Saved features to {output_stem}{extension}")
 
     def _process_batched(
         self, input_data: data.InputData, extractor: DinoFeatureExtractor
     ) -> None:
         """Process batched input (video file, video dir, or image directory with fixed input size)."""
-        needs_global = self.config.save_features == "frame"
-        needs_local = self.config.save_features in ["full", "flat"] or (not self.config.no_vis and not needs_global)
+        needs_global = self.config.save_features in ["frame", "all"]
+        needs_local = self.config.save_features in ["full", "flat", "all"] or (not self.config.no_vis and not needs_global)
 
         # Setup PCA for local features
         if needs_local and not self.config.no_vis:
@@ -561,13 +566,19 @@ class DinotoolProcessor:
         # Setup output paths for local features
         feature_out_name = None
         if needs_local and self.config.save_features:
-            extension = ".zarr" if self.config.save_features == "full" else ".parquet"
+            extension = ".zarr" if self._local_save_method == "full" else ".parquet"
             feature_out_name = Path(self.config.output).with_suffix(extension)
 
         # Process batches
         progbar = tqdm(total=len(input_data.source))
         tmpdir = f"temp_dinotool_frames-{uuid.uuid4()}"
         os.mkdir(tmpdir)
+
+        # When saving both local and global, write global parquets to a subdir to avoid name collision
+        global_tmpdir = tmpdir
+        if needs_local and needs_global:
+            global_tmpdir = f"{tmpdir}/global"
+            os.mkdir(global_tmpdir)
 
         if needs_local:
             batch_handler = BatchHandler(
@@ -579,6 +590,7 @@ class DinotoolProcessor:
                 input_data, extractor, tmpdir,
                 batch_handler=batch_handler if needs_local else None,
                 needs_local=needs_local, needs_global=needs_global,
+                global_tmpdir=global_tmpdir,
                 progbar=progbar,
             )
 
@@ -593,7 +605,7 @@ class DinotoolProcessor:
             # Combine local features
             if needs_local and self.config.save_features:
                 FeatureSaver.combine_frame_features(
-                    method=self.config.save_features,
+                    method=self._local_save_method,
                     tmpdir=tmpdir,
                     feature_out_name=str(feature_out_name),
                 )
@@ -601,10 +613,13 @@ class DinotoolProcessor:
             # Combine global features
             if needs_global:
                 output_stem = Path(self.config.output).with_suffix("")
-                FeatureSaver._combine_parquet_files(
-                    tmpdir, f"{output_stem}.parquet"
+                global_out = (
+                    f"{output_stem}_frame.parquet"
+                    if self.config.save_features == "all"
+                    else f"{output_stem}.parquet"
                 )
-                print(f"Saved frame features to {output_stem}.parquet")
+                FeatureSaver._combine_parquet_files(global_tmpdir, global_out)
+                print(f"Saved frame features to {global_out}")
 
         finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
@@ -617,6 +632,7 @@ class DinotoolProcessor:
         batch_handler: Optional[BatchHandler],
         needs_local: bool,
         needs_global: bool,
+        global_tmpdir: str,
         progbar,
     ) -> None:
         """Inner loop for batched processing."""
@@ -641,7 +657,7 @@ class DinotoolProcessor:
                         output_path = f"{tmpdir}/{idx:05d}"
                         FeatureSaver.save_batch_features(
                             batch_frames,
-                            method=self.config.save_features,
+                            method=self._local_save_method,
                             output=output_path,
                         )
 
@@ -658,7 +674,7 @@ class DinotoolProcessor:
                         columns = [f"feature_{i}" for i in range(global_features.shape[1])]
                         df = pd.DataFrame(global_features, index=[filename], columns=columns)
                         df.index.set_names(["filename"], inplace=True)
-                    df.to_parquet(Path(tmpdir) / f"{idx:05d}.parquet")
+                    df.to_parquet(Path(global_tmpdir) / f"{idx:05d}.parquet")
                     progbar.update(len(batch["img"]))
 
                 idx += 1
@@ -671,8 +687,8 @@ class DinotoolProcessor:
         self, input_data: data.InputData, extractor: DinoFeatureExtractor
     ) -> None:
         """Process a directory of images one at a time (variable sizes). Batch size 1."""
-        needs_global = self.config.save_features == "frame"
-        needs_local = self.config.save_features in ["full", "flat"] or (not self.config.no_vis and not needs_global)
+        needs_global = self.config.save_features in ["frame", "all"]
+        needs_local = self.config.save_features in ["full", "flat", "all"] or (not self.config.no_vis and not needs_global)
 
         out_dir = Path(self.config.output)
         out_dir.mkdir(parents=True, exist_ok=True)
@@ -723,9 +739,9 @@ class DinotoolProcessor:
                     output_stem = Path(self.config.output).with_suffix("")
                     out_path = os.path.join(str(output_stem), f"{filename_stem}")
                     FeatureSaver.save_batch_features(
-                        [frame], method=self.config.save_features, output=out_path
+                        [frame], method=self._local_save_method, output=out_path
                     )
-                    extension = ".nc" if self.config.save_features == "full" else ".parquet"
+                    extension = ".nc" if self._local_save_method == "full" else ".parquet"
                     print(f"Saved features to {out_path}{extension}")
 
             progbar.update(1)

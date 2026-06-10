@@ -79,6 +79,30 @@ def test_imagedir_features_frame():
     assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
 
 
+def test_imagedir_features_all():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1_all",
+        save_features="all",
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    output_dir = Path("test/outputs/if1_all")
+    assert output_dir.exists()
+    assert len(list(output_dir.glob("*.parquet"))) == N_FILES_IN_DIR
+
+    df = pd.read_parquet("test/outputs/if1_all/bird1.parquet")
+    assert df.index.names == ["frame_idx", "patch_idx"]
+    assert df.shape[1] == 384
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
+
+    df_global = pd.read_parquet("test/outputs/if1_all.parquet")
+    assert df_global.shape == (N_FILES_IN_DIR, 384)
+    assert df_global.index.names == ["filename"]
+    assert np.allclose(np.linalg.norm(df_global.values, axis=1), 1.0, atol=1e-5)
+
+
 # Resized and batch processed
 def test_batched_imagedir_features_full():
     config = DinotoolConfig(

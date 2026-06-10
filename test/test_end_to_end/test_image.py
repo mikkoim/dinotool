@@ -89,6 +89,27 @@ def test_image_features_frame():
     assert np.allclose(np.linalg.norm(df.values), 1.0, atol=1e-5)
 
 
+def test_image_features_all():
+    config = DinotoolConfig(
+        input="test/data/magpie.jpg",
+        output="test/outputs/out_all.jpg",
+        save_features="all",
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+    assert os.path.exists("test/outputs/out_all.jpg")
+    assert os.path.exists("test/outputs/out_all.parquet")
+    assert os.path.exists("test/outputs/out_all.txt")
+
+    df = pd.read_parquet("test/outputs/out_all.parquet")
+    assert df.shape == (910, 384)
+    assert df.index.names == ["frame_idx", "patch_idx"]
+
+    global_df = pd.read_csv("test/outputs/out_all.txt", header=None)
+    assert global_df.shape == (1, 384)
+    assert np.allclose(np.linalg.norm(global_df.values), 1.0, atol=1e-5)
+
+
 def test_image_no_vis_flat():
     config = DinotoolConfig(
         input="test/data/magpie.jpg",

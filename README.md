@@ -194,6 +194,7 @@ Use `--save-features` to export features for downstream tasks.
 | `full`   | `.nc` (image) / `.zarr` (video, batched image folders)| `(frames, height, width, feature)`|  Keeps spatial structure of patches.    |
 | `flat`   | partitioned `.parquet`         | `(frames * height * width, feature)`|  Reliable long video processing. Faster patch-level analysis  |
 | `frame`  | `.parquet`                     | `(frames, feature)`| One global feature vector per frame |
+| `all`    | `.parquet` (flat local) + `.parquet` / `.txt` (global) | both of the above (`flat` and `frame`) | Single-pass extraction of both local and global features |
 
 ### `full` - Spatial local features
 - Saves full patch feature maps from the ViT (one vector per image patch).
@@ -231,6 +232,28 @@ dinotool input.jpg -o output.jpg --save-features frame
 ```
 
 The output is a side-by-side visualization with PCA of the patch-level features.
+
+### `all` - Both local and global features in one pass
+- Combines `flat` and `frame`: saves flattened patch features **and** global CLS token features in a single model forward pass.
+- Useful when you need both patch-level and frame-level representations without running the model twice.
+- Output files per input type:
+
+| Input | Local (flat patches) | Global (frame) |
+|-------|----------------------|----------------|
+| Single image | `<output>.parquet` | `<output>.txt` |
+| Video / batched image folder | `<output>.parquet/` | `<output>_frame.parquet/` |
+| Image folder (variable sizes) | `<outdir>/<image>.parquet` per image | `<outdir>.parquet` (combined) |
+
+```bash
+# Single image — produces out.parquet (patches) and out.txt (global)
+dinotool input.jpg -o out --save-features all --no-vis
+
+# Video — produces out.parquet/ (patches) and out_frame.parquet/ (global)
+dinotool input.mp4 -o out.mp4 --save-features all --no-vis
+
+# Image folder — per-image parquets + combined global parquet
+dinotool images/ -o results --save-features all --no-vis
+```
 
 ## 🧪 Additional Options
 
@@ -318,7 +341,7 @@ Arguments:
   -o, --output            Path for the output (required).
 
 Options:
-  -s, --save-features MODE    Save extracted features: full, flat, or frame
+  -s, --save-features MODE    Save extracted features: full, flat, frame, or all
   -m, --model-name MODEL      Model to use (default: dinov2_vits14_reg)
   --input-size W H        Resize input before processing. Must be set for batch
                           processing of image folders
