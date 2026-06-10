@@ -166,3 +166,29 @@ def test_batched_imagedir_features_frame():
     )
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
     assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
+
+
+def test_batched_imagedir_features_all():
+    config = DinotoolConfig(
+        input="test/data/imagefolder",
+        output="test/outputs/if1_all_b",
+        save_features="all",
+        batch_size=2,
+        input_size=(224, 224),
+        no_vis=True,
+    )
+    processor = DinotoolProcessor(config)
+    processor.run()
+
+    df = pd.read_parquet("test/outputs/if1_all_b.parquet")
+    assert df.index.names == ["filename", "patch_idx"]
+    assert df.shape == (N_FILES_IN_DIR * 256, 384)
+    assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
+
+    df_global = pd.read_parquet("test/outputs/if1_all_b_frame.parquet")
+    assert df_global.shape == (N_FILES_IN_DIR, 384)
+    assert df_global.index.names == ["filename"]
+    assert set(df_global.index) == set(
+        [x.name for x in Path("test/data/imagefolder").glob("*")]
+    )
+    assert np.allclose(np.linalg.norm(df_global.values, axis=1), 1.0, atol=1e-5)

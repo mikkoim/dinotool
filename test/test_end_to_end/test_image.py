@@ -33,6 +33,31 @@ def test_smoke_radio():
     run_backbone_test("radio-b", input_size=(64,64))
 
 
+def run_backbone_all_test(name, input_size=None):
+    out_path = f"test/outputs/backbones/{name}_all"
+    model_name = MODEL_SHORTCUTS[name]
+    config = DinotoolConfig(
+        model_name=model_name,
+        input="test/data/magpie.jpg",
+        output=f"{out_path}.jpg",
+        save_features="all",
+        input_size=input_size,
+        no_vis=True,
+    )
+    DinotoolProcessor(config).run()
+    assert os.path.exists(f"{out_path}.parquet")
+    assert os.path.exists(f"{out_path}.txt")
+    global_df = pd.read_csv(f"{out_path}.txt", header=None)
+    assert global_df.shape[0] == 1
+    assert np.allclose(np.linalg.norm(global_df.values), 1.0, atol=1e-5)
+
+def test_all_mode_dinov2():  run_backbone_all_test("vit-s",    input_size=(64, 64))
+def test_all_mode_dinov3():  run_backbone_all_test("dinov3-s", input_size=(64, 64))
+def test_all_mode_siglip():  run_backbone_all_test("siglip2",  input_size=(64, 64))
+def test_all_mode_clip():    run_backbone_all_test("clip",     input_size=(64, 64))
+def test_all_mode_radio():   run_backbone_all_test("radio-b",  input_size=(64, 64))
+
+
 def test_image_features_full():
     config = DinotoolConfig(
         input="test/data/magpie.jpg",

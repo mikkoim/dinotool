@@ -672,10 +672,11 @@ class DinotoolProcessor:
                     else:
                         filename = batch["filename"]
                         columns = [f"feature_{i}" for i in range(global_features.shape[1])]
-                        df = pd.DataFrame(global_features, index=[filename], columns=columns)
+                        df = pd.DataFrame(global_features, index=list(filename), columns=columns)
                         df.index.set_names(["filename"], inplace=True)
                     df.to_parquet(Path(global_tmpdir) / f"{idx:05d}.parquet")
-                    progbar.update(len(batch["img"]))
+                    if not needs_local:  # BatchHandler already ticks progbar when needs_local
+                        progbar.update(len(batch["img"]))
 
                 idx += 1
 
