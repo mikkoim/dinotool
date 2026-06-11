@@ -3,7 +3,7 @@
 
 # 🦕 DINOtool
 
-**DINOtool** is a command-line tool for extracting visual features using state-of-the-art foundation models like DINOv3, DINOv2, CLIP, SigLIP2 and AM-RADIO.
+**DINOtool** is a command-line tool for extracting visual features using state-of-the-art foundation models like DINOv3, DINOv2, CLIP, SigLIP2, TIPSv2, and AM-RADIO.
 It supports the extraction **global (frame-level)** and **local (patch-level)** features from images, videos and image directories, and can optionally visualize feature maps using PCA.
 
 ### Use from the command line
@@ -48,11 +48,12 @@ plt.imshow(model.pca(local_features)) # PCA visualization
 # Supported models
 
 - [DINOv2](https://github.com/facebookresearch/dinov2)
-- [DINOv3](https://github.com/facebookresearch/dinov3) (Gated model - requires logging in to Hugginface Hub and applying access at [each model page](https://huggingface.co/collections/facebook/dinov3-68924841bd6b561778e31009))
+- [DINOv3](https://github.com/facebookresearch/dinov3) (Gated model - requires logging in to Hugginface Hub and applying access at [each model page](https://huggingface.co/collections/facebook/dinov3))
 - [SigLIP](https://arxiv.org/abs/2303.15343)
 - [SigLIP 2](https://arxiv.org/abs/2502.14786)
 - [CLIP](https://github.com/openai/CLIP)
-- [AM-RADIO](https://github.com/NVlabs/RADIO)
+- [C-RADIO / AM-RADIO](https://github.com/NVlabs/RADIO)
+- [TIPSv2](https://huggingface.co/collections/google/tipsv2)
 
 List available models and their shortcuts with `dinotool --models`.
 # Examples:
@@ -308,6 +309,26 @@ There are some predefined shortcuts for popular models. These can be passed to `
 
 # CLIP
 "clip": "hf-hub:timm/vit_base_patch16_clip_224.openai"
+
+# DINOv3
+"dinov3-s": "facebook/dinov3-vits14-pretrain-lvd1689m"
+"dinov3-splus": "facebook/dinov3-vits14plus-pretrain-lvd1689m"
+"dinov3-b": "facebook/dinov3-vitb14-pretrain-lvd1689m"
+"dinov3-l": "facebook/dinov3-vitl16-pretrain-lvd1689m"
+"dinov3-hplus": "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+"dinov3-l-sat": "facebook/dinov3-vitl16-pretrain-sat493m"
+
+# AM-RADIO
+"radio-b": "NVlabs/RADIO/c-radio_v3-b"
+"radio-l": "NVlabs/RADIO/c-radio_v3-l"
+"radio-h": "NVlabs/RADIO/c-radio_v3-h"
+"radio-g": "NVlabs/RADIO/c-radio_v3-g"
+
+# TIPSv2
+"tipsv2-b": "google/tipsv2-b14"
+"tipsv2-l": "google/tipsv2-l14"
+"tipsv2-so400m": "google/tipsv2-so400m14"
+"tipsv2-g": "google/tipsv2-g14"
 ```
 
 ## `--input-size`

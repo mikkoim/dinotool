@@ -43,6 +43,12 @@ def load_model(model_name: str = "dinov2_vits14_reg") -> nn.Module:
                 message="warmup, rep, and use_cuda_graph parameters are deprecated.*",
             )
             model = torch.hub.load('NVlabs/RADIO', 'radio_model', version=model_version)
+    
+    elif model_name.startswith("google/tipsv2"):
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", message="xFormers is available*")
+            model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+        model.patch_size = model.config.patch_size
 
     else:
         with warnings.catch_warnings():
@@ -275,6 +281,50 @@ class RADIOFeatureExtractor(nn.Module):
 
         return features
 
+class TIPSv2FeatureExtractor(nn.Module):
+    def __init__(self, model: nn.Module, device: str = "cuda"):
+        """Feature extractor for TIPSv2 model.
+        Args:
+            model (nn.Module): TIPSv2 model.
+            input_size (Tuple[int, int]): feature map size (width, height).
+            device (str): device to use for computation.
+        """
+        super().__init__()
+        self.model = model.eval().to(device)
+        self.device = device
+        self.patch_size = model.patch_size
+
+    def forward(
+        self,
+        batch: torch.Tensor,       # (b, c, h, w), already preprocessed
+        flattened: bool = True,
+        normalized: bool = True,
+        return_clstoken: bool = False,
+    ):
+        b, c, h, w = batch.shape
+        dims = calculate_dino_dimensions((w, h), self.patch_size)
+        h_featmap, w_featmap = dims["h_featmap"], dims["w_featmap"]
+
+        with torch.no_grad():
+            batch = batch.to(self.device)
+            out = self.model(batch)
+
+        if return_clstoken:
+            cls = out.image_features.cls_token.squeeze(dim=1)
+            if normalized:
+                cls = torch.nn.functional.normalize(cls, dim=-1)
+            return cls
+
+        # patch tokens — shape must end up as (b, h_featmap, w_featmap, f)
+        # or (b, h_featmap*w_featmap, f) — LocalFeatures handles both
+        patch_tokens = out.image_features.patch_tokens
+
+        features = LocalFeatures(
+            patch_tokens, is_flattened=True, h=h_featmap, w=w_featmap
+        )
+        if normalized:
+            features = features.normalize()
+        return features.flat() if flattened else features.full()
 
 class PCAModule:
     def __init__(self, n_components: int = 3, feature_map_size: Tuple[int, int] = None):

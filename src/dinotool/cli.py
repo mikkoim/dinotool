@@ -24,6 +24,7 @@ from dinotool.model import (
     DinoV3FeatureExtractor,
     OpenCLIPFeatureExtractor,
     RADIOFeatureExtractor,
+    TIPSv2FeatureExtractor,
     PCAModule,
     load_model,
 )
@@ -67,6 +68,11 @@ MODEL_SHORTCUTS = {
     "radio-h": "NVlabs/RADIO/c-radio_v3-h",
     "radio-g": "NVlabs/RADIO/c-radio_v3-g",
 
+    "tipsv2-b": "google/tipsv2-b14",
+    "tipsv2-l": "google/tipsv2-l14",
+    "tipsv2-so400m" : "google/tipsv2-so400m14",
+    "tipsv2-g": "google/tipsv2-g14",
+
 }
 
 class PrintModelsAction(argparse.Action):
@@ -78,7 +84,8 @@ class PrintModelsAction(argparse.Action):
               "\nMore information:",
               "\n - DINOv2: https://github.com/facebookresearch/dinov2",
               "\n - DINOv3: https://github.com/facebookresearch/dinov3",
-              "\n - RADIO: https://github.com/NVlabs/RADIO")
+              "\n - RADIO: https://github.com/NVlabs/RADIO",
+              "\n - TIPSv2: https://github.com/google-deepmind/tips")
         parser.exit()
 
 VALID_IMAGE_EXTENSIONS = (".jpg", ".png")
@@ -399,6 +406,8 @@ class ExtractorFactory:
             return DinoV3FeatureExtractor(model, device=device)
         elif model_name.startswith("NVlabs/RADIO/"):
             return RADIOFeatureExtractor(model, device=device)
+        elif model_name.startswith("google/tipsv2"):
+            return TIPSv2FeatureExtractor(model, device=device)
         else:
             return DinoFeatureExtractor(model, device=device)
 

@@ -376,7 +376,6 @@ class OpenCLIPTransform:
     resize_size: Optional[Tuple[int, int]] = None
     feature_map_size: Optional[Tuple[int, int]] = None
 
-
 @dataclass
 class DINOTransform:
     transform: nn.Module
@@ -385,6 +384,12 @@ class DINOTransform:
 
 @dataclass
 class RADIOTransform:
+    transform: nn.Module
+    resize_size: Optional[Tuple[int, int]] = None
+    feature_map_size: Optional[Tuple[int, int]] = None
+
+@dataclass
+class TIPSv2Transform:
     transform: nn.Module
     resize_size: Optional[Tuple[int, int]] = None
     feature_map_size: Optional[Tuple[int, int]] = None
@@ -439,7 +444,8 @@ class TransformFactory:
             self._RADIOmodel.to("cpu")
             self._RADIOmodel.eval()
             self._RADIOconditioner = self._RADIOmodel.make_preprocessor_external()
-
+        elif model_name.startswith("google/tipsv2"):
+            self.model_type = "tipsv2"
         else:
             self.model_type = "dino"
 
@@ -524,6 +530,27 @@ class TransformFactory:
         self._transform_cache[input_size] = self.transform
         return self.transform
 
+    def get_tipsv2_transform(self, input_size: Tuple[int, int]):
+        if input_size in self._transform_cache:
+            return self._transform_cache[input_size]
+
+        dims = calculate_dino_dimensions(input_size, patch_size=self.patch_size)
+        model_input_size = (dims["w"], dims["h"])
+        feature_map_size = (dims["w_featmap"], dims["h_featmap"])
+
+        transform = transforms.Compose([
+            transforms.Resize((model_input_size[1], model_input_size[0])),
+            transforms.ToTensor(),
+        ])
+
+        result = TIPSv2Transform(
+            transform=transform,
+            resize_size=model_input_size,
+            feature_map_size=feature_map_size,
+        )
+        self._transform_cache[input_size] = result
+        return result
+
     def get_transform(self, input_size: Tuple[int, int]) -> nn.Module:
         if self.model_type == "openclip":
             return self.get_openclip_transform()
@@ -531,6 +558,8 @@ class TransformFactory:
             return self.get_dino_transform(input_size)
         elif self.model_type == "radio":
             return self.get_radio_transform(input_size)
+        elif self.model_type == "tipsv2":
+            return self.get_tipsv2_transform(input_size)
 
 
 @dataclass
