@@ -124,6 +124,15 @@ You can check that dinotool is properly installed by testing it on an image:
 dinotool test.jpg -o out.jpg
 ```
 
+### CUDA 12
+
+PyTorch now ships with CUDA 13 by default. If your system has CUDA 12, install a compatible `torch` version first (example, change version based on your system):
+
+```bash
+pip install torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu126
+pip install dinotool
+```
+
 ### `uv`
 
 If you have `uv` installed, you can simply run DINOtool with

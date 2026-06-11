@@ -521,14 +521,19 @@ class DinotoolProcessor:
         Path(self.config.output).parent.mkdir(parents=True, exist_ok=True)
         output_stem = Path(self.config.output).with_suffix("")
 
-        if needs_global:
+        if needs_local and needs_global:
+            features, global_tensor = extractor(input_data.data, return_both=True)
+            global_features = global_tensor.cpu().numpy()
+        elif needs_global:
             global_features = extractor(input_data.data, return_clstoken=True).cpu().numpy()
+        elif needs_local:
+            features = extractor(input_data.data)
+
+        if needs_global:
             np.savetxt(f"{output_stem}.txt", global_features, delimiter=",")
             print(f"Saved frame features to {output_stem}.txt")
 
         if needs_local:
-            features = extractor(input_data.data)
-
             if not self.config.no_vis:
                 pca = PCAModule(
                     n_components=3, feature_map_size=input_data.feature_map_size
@@ -648,9 +653,18 @@ class DinotoolProcessor:
         try:
             idx = 0
             for batch in input_data.data:
-                if needs_local:
+                if needs_local and needs_global:
+                    local_feats, global_tensor = extractor(batch["img"], return_both=True)
+                    batch_frames = batch_handler.process_features(local_feats, batch)
+                    global_features = global_tensor.cpu().numpy()
+                elif needs_local:
                     batch_frames = batch_handler(batch)
+                elif needs_global:
+                    global_features = (
+                        extractor(batch["img"], return_clstoken=True).cpu().numpy()
+                    )
 
+                if needs_local:
                     # Save visualization frames
                     if not self.config.no_vis:
                         for frame in batch_frames:
@@ -671,9 +685,6 @@ class DinotoolProcessor:
                         )
 
                 if needs_global:
-                    global_features = (
-                        extractor(batch["img"], return_clstoken=True).cpu().numpy()
-                    )
                     if "frame_idx" in batch:
                         frame_idx = batch["frame_idx"].cpu().numpy()
                         columns = [f"feature_{i}" for i in range(global_features.shape[1])]
@@ -713,17 +724,23 @@ class DinotoolProcessor:
             input_size = extractor.patch_size * np.array(feature_map_size)
             progbar.set_description(f"Processing {filename}. Input size: {input_size}")
 
-            if needs_global:
+            if needs_local and needs_global:
+                features, global_tensor = extractor(batch["img"], return_both=True)
+                global_features = global_tensor.cpu().numpy()
+            elif needs_global:
                 global_features = (
                     extractor(batch["img"], return_clstoken=True).cpu().numpy()
                 )
+            elif needs_local:
+                features = extractor(batch["img"])
+
+            if needs_global:
                 columns = [f"feature_{i}" for i in range(global_features.shape[1])]
                 df = pd.DataFrame(global_features, index=[filename], columns=columns)
                 df.index.set_names(["filename"], inplace=True)
                 all_global_dfs.append(df)
 
             if needs_local:
-                features = extractor(batch["img"])
                 if not self.config.no_vis:
                     pca = PCAModule(n_components=3, feature_map_size=feature_map_size)
                     pca.fit(features.flat().tensor, verbose=False)
