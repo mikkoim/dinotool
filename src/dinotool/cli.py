@@ -4,9 +4,9 @@ DINOtool CLI: Extract and visualize DINO features from images and videos.
 
 import argparse
 import os
+import pickle
 import shutil
 import subprocess
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Literal, Optional, Tuple, Union
@@ -105,6 +105,7 @@ class DinotoolConfig:
     only_pca: bool = False
     save_features: Optional[str] = None
     no_vis: bool = False
+    resume: bool = False
 
 
 class ArgumentValidator:
@@ -263,6 +264,12 @@ class ArgumentParser:
             help="Force overwrite output file if it exists (default: False).",
         )
         parser.add_argument(
+            "--resume",
+            "-r",
+            action="store_true",
+            help="Resume a previously interrupted run. Skips already-processed batches found in the temp directory (video/image-directory inputs with --save-features only).",
+        )
+        parser.add_argument(
             "--models",
             action=PrintModelsAction,
             nargs=0,
@@ -322,6 +329,7 @@ class ArgumentParser:
             only_pca=args.only_pca,
             save_features=args.save_features,
             no_vis=args.no_vis,
+            resume=args.resume,
         )
 
 
@@ -569,28 +577,38 @@ class DinotoolProcessor:
         needs_global = self.config.save_features in ["frame", "all"]
         needs_local = self.config.save_features in ["full", "flat", "all"] or (not self.config.no_vis and not needs_global)
 
-        # Setup PCA for local features
-        if needs_local and not self.config.no_vis:
-            pca = self._setup_pca(extractor, input_data.data, input_data.feature_map_size)
-        else:
-            pca = None
-
         # Setup output paths for local features
         feature_out_name = None
         if needs_local and self.config.save_features:
             extension = ".zarr" if self._local_save_method == "full" else ".parquet"
             feature_out_name = Path(self.config.output).with_suffix(extension)
 
-        # Process batches
-        progbar = tqdm(total=len(input_data.source))
-        tmpdir = f"temp_dinotool_frames-{uuid.uuid4()}"
-        os.mkdir(tmpdir)
+        # Deterministic tmpdir so interrupted runs can be resumed with --resume
+        output_stem = Path(self.config.output).with_suffix("")
+        tmpdir = f"{output_stem}.dinotool_tmp"
+        if os.path.exists(tmpdir) and not self.config.resume:
+            shutil.rmtree(tmpdir, ignore_errors=True)
+        os.makedirs(tmpdir, exist_ok=True)
 
         # When saving both local and global, write global parquets to a subdir to avoid name collision
         global_tmpdir = tmpdir
         if needs_local and needs_global:
             global_tmpdir = f"{tmpdir}/global"
-            os.mkdir(global_tmpdir)
+            os.makedirs(global_tmpdir, exist_ok=True)
+
+        # Setup PCA for local features — cache to tmpdir so resume skips refitting
+        pca = None
+        if needs_local and not self.config.no_vis:
+            pca_cache = Path(tmpdir) / "pca.pkl"
+            if self.config.resume and pca_cache.exists():
+                with open(pca_cache, "rb") as f:
+                    pca = pickle.load(f)
+            else:
+                pca = self._setup_pca(extractor, input_data.data, input_data.feature_map_size)
+                with open(pca_cache, "wb") as f:
+                    pickle.dump(pca, f)
+
+        progbar = tqdm(total=len(input_data.source))
 
         if needs_local:
             batch_handler = BatchHandler(
@@ -624,7 +642,6 @@ class DinotoolProcessor:
 
             # Combine global features
             if needs_global:
-                output_stem = Path(self.config.output).with_suffix("")
                 global_out = (
                     f"{output_stem}_frame.parquet"
                     if self.config.save_features == "all"
@@ -633,8 +650,25 @@ class DinotoolProcessor:
                 FeatureSaver._combine_parquet_files(global_tmpdir, global_out)
                 print(f"Saved frame features to {global_out}")
 
-        finally:
             shutil.rmtree(tmpdir, ignore_errors=True)
+
+        except (KeyboardInterrupt, Exception):
+            print(f"\nProcessing interrupted. Temp files saved to '{tmpdir}'.")
+            print("Re-run with --resume to continue from where it stopped.")
+            raise
+
+    def _batch_already_done(
+        self, idx: int, tmpdir: str, global_tmpdir: str, needs_local: bool, needs_global: bool
+    ) -> bool:
+        """Return True if batch idx's output files already exist in tmpdir."""
+        if needs_local and self.config.save_features:
+            ext = ".nc" if self._local_save_method == "full" else ".parquet"
+            if not Path(f"{tmpdir}/{idx:05d}{ext}").exists():
+                return False
+        if needs_global:
+            if not Path(global_tmpdir, f"{idx:05d}.parquet").exists():
+                return False
+        return needs_local or needs_global
 
     def _process_batched_loop(
         self,
@@ -648,60 +682,62 @@ class DinotoolProcessor:
         progbar,
     ) -> None:
         """Inner loop for batched processing."""
-        try:
-            idx = 0
-            for batch in input_data.data:
-                if needs_local and needs_global:
-                    local_feats, global_tensor = extractor(batch["img"], return_both=True)
-                    batch_frames = batch_handler.process_features(local_feats, batch)
-                    global_features = global_tensor.cpu().numpy()
-                elif needs_local:
-                    batch_frames = batch_handler(batch)
-                elif needs_global:
-                    global_features = (
-                        extractor(batch["img"], return_clstoken=True).cpu().numpy()
+        idx = 0
+        for batch in input_data.data:
+            if self.config.resume and self._batch_already_done(
+                idx, tmpdir, global_tmpdir, needs_local, needs_global
+            ):
+                progbar.update(len(batch["img"]))
+                idx += 1
+                continue
+
+            if needs_local and needs_global:
+                local_feats, global_tensor = extractor(batch["img"], return_both=True)
+                batch_frames = batch_handler.process_features(local_feats, batch)
+                global_features = global_tensor.cpu().numpy()
+            elif needs_local:
+                batch_frames = batch_handler(batch)
+            elif needs_global:
+                global_features = (
+                    extractor(batch["img"], return_clstoken=True).cpu().numpy()
+                )
+
+            if needs_local:
+                # Save visualization frames
+                if not self.config.no_vis:
+                    for frame in batch_frames:
+                        out_img = frame_visualizer(
+                            frame,
+                            output_size=input_data.input_size,
+                            only_pca=self.config.only_pca,
+                        )
+                        out_img.save(f"{tmpdir}/{frame.frame_idx:05d}.jpg")
+
+                # Save local features
+                if self.config.save_features:
+                    output_path = f"{tmpdir}/{idx:05d}"
+                    FeatureSaver.save_batch_features(
+                        batch_frames,
+                        method=self._local_save_method,
+                        output=output_path,
                     )
 
-                if needs_local:
-                    # Save visualization frames
-                    if not self.config.no_vis:
-                        for frame in batch_frames:
-                            out_img = frame_visualizer(
-                                frame,
-                                output_size=input_data.input_size,
-                                only_pca=self.config.only_pca,
-                            )
-                            out_img.save(f"{tmpdir}/{frame.frame_idx:05d}.jpg")
+            if needs_global:
+                if "frame_idx" in batch:
+                    frame_idx = batch["frame_idx"].cpu().numpy()
+                    columns = [f"feature_{i}" for i in range(global_features.shape[1])]
+                    df = pd.DataFrame(global_features, index=frame_idx, columns=columns)
+                    df.index.set_names(["frame_idx"], inplace=True)
+                else:
+                    filename = batch["filename"]
+                    columns = [f"feature_{i}" for i in range(global_features.shape[1])]
+                    df = pd.DataFrame(global_features, index=list(filename), columns=columns)
+                    df.index.set_names(["filename"], inplace=True)
+                df.to_parquet(Path(global_tmpdir) / f"{idx:05d}.parquet")
+                if not needs_local:  # BatchHandler already ticks progbar when needs_local
+                    progbar.update(len(batch["img"]))
 
-                    # Save local features
-                    if self.config.save_features:
-                        output_path = f"{tmpdir}/{idx:05d}"
-                        FeatureSaver.save_batch_features(
-                            batch_frames,
-                            method=self._local_save_method,
-                            output=output_path,
-                        )
-
-                if needs_global:
-                    if "frame_idx" in batch:
-                        frame_idx = batch["frame_idx"].cpu().numpy()
-                        columns = [f"feature_{i}" for i in range(global_features.shape[1])]
-                        df = pd.DataFrame(global_features, index=frame_idx, columns=columns)
-                        df.index.set_names(["frame_idx"], inplace=True)
-                    else:
-                        filename = batch["filename"]
-                        columns = [f"feature_{i}" for i in range(global_features.shape[1])]
-                        df = pd.DataFrame(global_features, index=list(filename), columns=columns)
-                        df.index.set_names(["filename"], inplace=True)
-                    df.to_parquet(Path(global_tmpdir) / f"{idx:05d}.parquet")
-                    if not needs_local:  # BatchHandler already ticks progbar when needs_local
-                        progbar.update(len(batch["img"]))
-
-                idx += 1
-
-        except KeyboardInterrupt:
-            print("Keyboard interrupt detected. Cleaning up...")
-            raise
+            idx += 1
 
     def _process_per_image(
         self, input_data: data.InputData, extractor: DinoFeatureExtractor

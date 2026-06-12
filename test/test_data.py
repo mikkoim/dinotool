@@ -1,4 +1,5 @@
 import pytest
+from unittest.mock import patch, MagicMock
 from dinotool.data import VideoDir, VideoFile, VideoDataset, Video
 from dinotool import data
 from torchvision import transforms
@@ -169,6 +170,51 @@ def test_input_processor_image_file():
     assert isinstance(input_data.data, torch.Tensor)
     assert input_data.input_size == (496, 368)
     assert input_data.feature_map_size == (31, 23)
+
+
+def test_video_file_verify_frame_count_accurate():
+    """When cv2 reports an accurate count, _verify_frame_count leaves it unchanged."""
+    video = VideoFile("test/data/nasa.mp4")
+    assert len(video) == 90
+
+
+def test_video_file_verify_frame_count_overreported():
+    """When cv2 overreports frame count, _verify_frame_count corrects it via binary search."""
+    real_frame_count = 90
+    inflated_count = real_frame_count + 5
+
+    # Wrap cv2.VideoCapture so CAP_PROP_FRAME_COUNT returns an inflated value
+    original_cap_class = VideoFile.__init__.__globals__["cv2"].VideoCapture
+
+    class FakeCapture:
+        def __init__(self, path):
+            self._real = original_cap_class(path)
+            self._get_calls = 0
+
+        def get(self, prop):
+            import cv2
+            if prop == cv2.CAP_PROP_FRAME_COUNT:
+                return inflated_count
+            return self._real.get(prop)
+
+        def set(self, prop, value):
+            return self._real.set(prop, value)
+
+        def read(self):
+            return self._real.read()
+
+        def release(self):
+            return self._real.release()
+
+    import cv2
+    with patch.object(cv2, "VideoCapture", FakeCapture):
+        video = VideoFile("test/data/nasa.mp4")
+
+    assert len(video) == real_frame_count
+    # All frames must be readable after correction
+    for i in range(len(video)):
+        frame = video[i]
+        assert frame is not None
 
 
 def test_local_features():

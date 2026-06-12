@@ -357,6 +357,22 @@ dinotool input.mp4 -o output.mp4 --batch-size 16
 
 For batch processing image folders, `--input-size` must be set. Visualization is also not possible.
 
+## `--resume` / `-r`
+
+Resume a previously interrupted `--save-features` run on a video or image directory.
+
+If processing is interrupted (Ctrl-C, crash, etc.), DINOtool keeps the partial results in a temporary directory named `<output_stem>.dinotool_tmp/`. Re-running the same command with `--resume` skips already-processed batches and continues from where it stopped:
+
+```bash
+# Original command (interrupted mid-way)
+dinotool long_video.mp4 -o output.mp4 --save-features flat --batch-size 16
+
+# Resume after interruption — skips already-processed batches
+dinotool long_video.mp4 -o output.mp4 --save-features flat --batch-size 16 --resume
+```
+
+The temporary directory is deleted automatically once processing completes successfully. Running without `--resume` when a stale tmpdir exists discards it and starts fresh.
+
 
 ## 🧑‍💻 Usage reference
 
@@ -379,6 +395,8 @@ Options:
   --only-pca              Only visualize PCA features.
   --no-vis                Only output features with no visualization.
                           --save features must be set.
+  -r, --resume            Resume a previously interrupted run (video/image-dir
+                          with --save-features). Skips already-processed batches.
   -f, --force             Force overwrite output file if it exists.
   --models                List available models and their shortcuts.
   --version               Show the version of DINOtool.

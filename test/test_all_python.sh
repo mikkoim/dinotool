@@ -30,3 +30,13 @@ pytest
 
 make clear_tests
 rm -rf py311 py312 py313
+
+# Slow tests
+source .venv/bin/activate
+export HF_HUB_CACHE=/mnt/d/models
+export TORCH_HOME=/mnt/d/models
+uv run pytest -m slow -s 
+
+export CUDA_VISIBLE_DEVICES=
+export XFORMERS_DISABLED=1
+uv run pytest -m slow -s --lf

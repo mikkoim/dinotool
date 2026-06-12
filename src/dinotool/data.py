@@ -242,6 +242,31 @@ class VideoFile:
         self.path = path
         self.video_capture = cv2.VideoCapture(path)
         self.frame_count = int(self.video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        self._verify_frame_count()
+
+    def _verify_frame_count(self) -> None:
+        """Correct frame_count if cv2 overreported it.
+
+        CAP_PROP_FRAME_COUNT is unreliable for long or VFR videos. Verifies the
+        last reported frame is actually readable; if not, binary-searches backward
+        to find the true count. O(log N) seeks — at most ~14 for a 19500-frame video.
+        """
+        if self.frame_count == 0:
+            return
+        self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, self.frame_count - 1)
+        ret, _ = self.video_capture.read()
+        if ret:
+            return
+        lo, hi = 0, self.frame_count - 1
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, mid)
+            ret, _ = self.video_capture.read()
+            if ret:
+                lo = mid
+            else:
+                hi = mid - 1
+        self.frame_count = lo + 1
 
     @property
     def resolution(self):
