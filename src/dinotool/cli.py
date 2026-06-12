@@ -9,7 +9,7 @@ import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import numpy as np
 import pandas as pd
@@ -796,7 +796,7 @@ class DinoToolModel:
         extractor (DinoFeatureExtractor): The feature extractor.
         transform_factory (data.TransformFactory): Factory for input transformations.
     Methods:
-        __call__(input, features="full", normalized=True): Extract features from input tensor.
+        __call__(input, features="full", normalized=True): Extract features from input tensor. features can be "full", "flat", "frame", or "all".
         get_transform(input_size): Get the appropriate input transformation for a given size.
         pca(features, n_components=3): Apply PCA to local features and return the transformed array.    
     Example:
@@ -841,15 +841,20 @@ class DinoToolModel:
     def __repr__(self) -> str:
         return f"DinoToolModel(model_name='{self.model_name}', device='{self.device}')"
     
-    def __call__(self, input: torch.Tensor, features: Literal["full", "flat", "frame"] = "full", normalized: bool = True) -> data.LocalFeatures:
+    def __call__(self, input: torch.Tensor, features: Literal["full", "flat", "frame", "all"] = "full", normalized: bool = True) -> Union[data.LocalFeatures, torch.Tensor, Tuple[data.LocalFeatures, torch.Tensor]]:
         """Extract features from input tensor.
         Args:
             input (torch.Tensor): Input tensor of shape (B, C, H, W).
-            features (str): Type of features to extract ("full", "flat", or "frame
-). Default is "full".
+            features (str): Type of features to extract. Default is "full".
+                - "full": local patch features with spatial layout (B, H, W, F).
+                - "flat": local patch features flattened to (B, H*W, F).
+                - "frame": global CLS token only, shape (B, F).
+                - "all": both local and global in one pass; returns (LocalFeatures, cls_tensor).
             normalized (bool): Whether to return normalized features. Default is True.
         Returns:
-            data.LocalFeatures: Extracted features.
+            data.LocalFeatures: for "full" and "flat".
+            torch.Tensor: for "frame" (shape B x F).
+            Tuple[data.LocalFeatures, torch.Tensor]: for "all" (local, cls).
         Example:
             >>> from dinotool import DinoToolModel
             >>> from PIL import Image
@@ -857,13 +862,13 @@ class DinoToolModel:
             >>> transform = model.get_transform((224, 224))
             >>> img = transform(Image.open("path/to/image.jpg")).unsqueeze(0)
             >>> features = model(img, features="full")
+            >>> local, cls = model(img, features="all")
         """
+        if features == "all":
+            return self.extractor(input, return_both=True, normalized=normalized)
         if features == "frame":
             return self.extractor(input, return_clstoken=True, normalized=normalized)
-        if features == "flat":
-            flattened = True
-        else:
-            flattened = False
+        flattened = features == "flat"
         return self.extractor(input, flattened=flattened, normalized=normalized)
     
     def get_transform(self, input_size: Tuple[int, int]) -> torch.nn.Module:
