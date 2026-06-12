@@ -104,5 +104,27 @@ def test_videodir_features_frame():
     df = pd.read_parquet("test/outputs/nasa_videodir_features_frame.parquet")
 
     assert df.shape == (9, 384)
+    assert df.index.names == ["frame_idx"]
     assert df.columns.tolist() == [f"feature_{i}" for i in range(384)]
     assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
+
+
+def test_videodir_features_all():
+    config = DinotoolConfig(
+        input="test/data/nasa_frames_small",
+        output="test/outputs/nasa_videodir_all.mp4",
+        batch_size=4,
+        save_features="all",
+        no_vis=True,
+    )
+    DinotoolProcessor(config).run()
+
+    df_local = pd.read_parquet("test/outputs/nasa_videodir_all.parquet")
+    assert df_local.shape == (5814, 384)
+    assert df_local.index.names == ["frame_idx", "patch_idx"]
+    assert np.allclose(np.linalg.norm(df_local.values, axis=1), 1.0, atol=1e-5)
+
+    df_global = pd.read_parquet("test/outputs/nasa_videodir_all_frame.parquet")
+    assert df_global.shape == (9, 384)
+    assert df_global.index.names == ["frame_idx"]
+    assert np.allclose(np.linalg.norm(df_global.values, axis=1), 1.0, atol=1e-5)

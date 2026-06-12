@@ -560,6 +560,8 @@ class TransformFactory:
             return self.get_radio_transform(input_size)
         elif self.model_type == "tipsv2":
             return self.get_tipsv2_transform(input_size)
+        else:
+            raise ValueError(f"Unknown model type: {self.model_type}")
 
 
 @dataclass

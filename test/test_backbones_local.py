@@ -1,6 +1,9 @@
-#export HF_HUB_CACHE=/mnt/d/models
-#export TORCH_HOME=/mnt/d/models
-#export CUDA_VISIBLE_DEVICES=
+# export HF_HUB_CACHE=/mnt/d/models
+# export TORCH_HOME=/mnt/d/models
+
+# For large models that do not fit in my GPU:
+# export CUDA_VISIBLE_DEVICES=
+# export XFORMERS_DISABLED=1
 
 import pytest
 

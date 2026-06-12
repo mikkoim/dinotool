@@ -222,11 +222,13 @@ class DinoV3FeatureExtractor(nn.Module):
                 features = torch.nn.functional.normalize(features, dim=-1)
             return features
 
-        cls = outputs.pooler_output
-        if normalized:
-            cls = torch.nn.functional.normalize(cls, dim=-1)
+        if return_both:
+            cls = outputs.pooler_output
+            if normalized:
+                cls = torch.nn.functional.normalize(cls, dim=-1)
 
-        feature_tensor = outputs.last_hidden_state[:,5:,:]
+        n_skip = 1 + self.model.config.num_register_tokens
+        feature_tensor = outputs.last_hidden_state[:, n_skip:, :]
 
         features = LocalFeatures(
             feature_tensor, is_flattened=True, h=h_featmap, w=w_featmap

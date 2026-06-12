@@ -18,11 +18,19 @@ elif model_name.startswith("myorg/mymodel"):
 
 `patch_size` is read later by the extractor and the transform factory, so it must be set here.
 
+For HuggingFace models that require custom code (e.g. `trust_remote_code=True`), follow the TIPSv2 pattern:
+
+```python
+elif model_name.startswith("google/tipsv2"):
+    model = AutoModel.from_pretrained(model_name, trust_remote_code=True)
+    model.patch_size = model.config.patch_size
+```
+
 ---
 
 ### 2. Write an extractor class — `src/dinotool/model.py`
 
-Subclass `nn.Module`. The only method that matters is `forward()`, which must accept these four arguments and return a `LocalFeatures` object (or a plain tensor when `return_clstoken=True`):
+Subclass `nn.Module`. The only method that matters is `forward()`, which must accept these five arguments and return a `LocalFeatures` object (or a plain tensor when `return_clstoken=True`, or a `(LocalFeatures, cls_tensor)` tuple when `return_both=True`):
 
 ```python
 class MyModelFeatureExtractor(nn.Module):
@@ -38,6 +46,7 @@ class MyModelFeatureExtractor(nn.Module):
         flattened: bool = True,
         normalized: bool = True,
         return_clstoken: bool = False,
+        return_both: bool = False,
     ):
         b, c, h, w = batch.shape
         dims = calculate_dino_dimensions((w, h), self.patch_size)
@@ -48,10 +57,11 @@ class MyModelFeatureExtractor(nn.Module):
             # --- call the model ---
             output = self.model(batch)
 
-        if return_clstoken:
-            cls = output.cls_token               # shape (b, f)
-            if normalized:
-                cls = torch.nn.functional.normalize(cls, dim=-1)
+        cls = output.cls_token                   # shape (b, f)
+        if normalized:
+            cls = torch.nn.functional.normalize(cls, dim=-1)
+
+        if return_clstoken and not return_both:
             return cls
 
         # patch tokens — shape must end up as (b, h_featmap, w_featmap, f)
@@ -63,8 +73,14 @@ class MyModelFeatureExtractor(nn.Module):
         )
         if normalized:
             features = features.normalize()
-        return features.flat() if flattened else features.full()
+        features = features.flat() if flattened else features.full()
+
+        if return_both:
+            return features, cls
+        return features
 ```
+
+**`return_both` semantics:** when `True`, returns `(LocalFeatures, cls_tensor)` in a single forward pass — used internally by `--save-features all` to avoid running the model twice. When `return_both=True`, `return_clstoken` is ignored.
 
 **`LocalFeatures` shape rules:**
 - Pass `is_flattened=True` when the tensor is `(b, h*w, f)`

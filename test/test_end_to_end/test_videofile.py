@@ -161,6 +161,29 @@ def test_videofile_batch_size_1():
     assert np.allclose(np.linalg.norm(df.values, axis=1), 1.0, atol=1e-5)
 
 
+def test_videofile_features_all_with_vis():
+    config = DinotoolConfig(
+        input="test/data/nasa.mp4",
+        output="test/outputs/nasaout_all_vis.mp4",
+        batch_size=4,
+        save_features="all",
+    )
+    DinotoolProcessor(config).run()
+
+    assert os.path.exists("test/outputs/nasaout_all_vis.mp4")
+    assert os.path.exists("test/outputs/nasaout_all_vis.parquet")
+    assert os.path.exists("test/outputs/nasaout_all_vis_frame.parquet")
+
+    df_local = pd.read_parquet("test/outputs/nasaout_all_vis.parquet")
+    assert df_local.shape == (58140, 384)
+    assert df_local.index.names == ["frame_idx", "patch_idx"]
+    assert np.allclose(np.linalg.norm(df_local.values, axis=1), 1.0, atol=1e-5)
+
+    df_global = pd.read_parquet("test/outputs/nasaout_all_vis_frame.parquet")
+    assert df_global.shape == (90, 384)
+    assert np.allclose(np.linalg.norm(df_global.values, axis=1), 1.0, atol=1e-5)
+
+
 def test_videofile_avi_format():
     config = DinotoolConfig(
         input="test/data/sintel.avi",

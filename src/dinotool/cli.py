@@ -371,10 +371,8 @@ class FeatureSaver:
                 ds.load()
                 return ds
 
-        if "filename" in xr.open_dataset(nc_files[0]).dims:
-            identifier = "filename"
-        else:
-            identifier = "frame_idx"
+        with xr.open_dataset(nc_files[0]) as _ds:
+            identifier = "filename" if "filename" in _ds.dims else "frame_idx"
 
         xr_data = xr.concat([load_dataset(path) for path in nc_files], dim=identifier)
         xr_data.to_zarr(output_name)
@@ -689,6 +687,7 @@ class DinotoolProcessor:
                         frame_idx = batch["frame_idx"].cpu().numpy()
                         columns = [f"feature_{i}" for i in range(global_features.shape[1])]
                         df = pd.DataFrame(global_features, index=frame_idx, columns=columns)
+                        df.index.set_names(["frame_idx"], inplace=True)
                     else:
                         filename = batch["filename"]
                         columns = [f"feature_{i}" for i in range(global_features.shape[1])]
