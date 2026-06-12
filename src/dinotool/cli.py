@@ -106,6 +106,7 @@ class DinotoolConfig:
     save_features: Optional[str] = None
     no_vis: bool = False
     resume: bool = False
+    tmpdir_base: Optional[str] = None
 
 
 class ArgumentValidator:
@@ -270,6 +271,12 @@ class ArgumentParser:
             help="Resume a previously interrupted run. Skips already-processed batches found in the temp directory (video/image-directory inputs with --save-features only).",
         )
         parser.add_argument(
+            "--tmpdir",
+            default=None,
+            metavar="DIR",
+            help="Parent directory for the temporary working directory (default: same directory as output).",
+        )
+        parser.add_argument(
             "--models",
             action=PrintModelsAction,
             nargs=0,
@@ -330,6 +337,7 @@ class ArgumentParser:
             save_features=args.save_features,
             no_vis=args.no_vis,
             resume=args.resume,
+            tmpdir_base=args.tmpdir,
         )
 
 
@@ -585,7 +593,10 @@ class DinotoolProcessor:
 
         # Deterministic tmpdir so interrupted runs can be resumed with --resume
         output_stem = Path(self.config.output).with_suffix("")
-        tmpdir = f"{output_stem}.dinotool_tmp"
+        if self.config.tmpdir_base:
+            tmpdir = str(Path(self.config.tmpdir_base) / f"{output_stem.name}.dinotool_tmp")
+        else:
+            tmpdir = f"{output_stem}.dinotool_tmp"
         if os.path.exists(tmpdir) and not self.config.resume:
             shutil.rmtree(tmpdir, ignore_errors=True)
         os.makedirs(tmpdir, exist_ok=True)
@@ -668,7 +679,7 @@ class DinotoolProcessor:
         if needs_global:
             if not Path(global_tmpdir, f"{idx:05d}.parquet").exists():
                 return False
-        return needs_local or needs_global
+        return (needs_local and bool(self.config.save_features)) or needs_global
 
     def _process_batched_loop(
         self,

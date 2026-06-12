@@ -373,6 +373,18 @@ dinotool long_video.mp4 -o output.mp4 --save-features flat --batch-size 16 --res
 
 The temporary directory is deleted automatically once processing completes successfully. Running without `--resume` when a stale tmpdir exists discards it and starts fresh.
 
+## `--tmpdir DIR`
+
+Override the parent directory for the temporary working directory used during batched processing. By default the tmpdir is placed next to the output file.
+
+```bash
+dinotool long_video.mp4 -o output.mp4 --save-features flat --tmpdir /scratch/tmp
+
+# Also works with --resume. Pass the same --tmpdir both times
+dinotool long_video.mp4 -o output.mp4 --save-features flat --tmpdir /scratch/tmp --resume
+```
+
+The tmpdir is always named `<output_stem>.dinotool_tmp` inside the specified directory.
 
 ## 🧑‍💻 Usage reference
 
@@ -397,6 +409,8 @@ Options:
                           --save features must be set.
   -r, --resume            Resume a previously interrupted run (video/image-dir
                           with --save-features). Skips already-processed batches.
+  --tmpdir DIR            Parent directory for the temporary working directory
+                          (default: same directory as output).
   -f, --force             Force overwrite output file if it exists.
   --models                List available models and their shortcuts.
   --version               Show the version of DINOtool.
