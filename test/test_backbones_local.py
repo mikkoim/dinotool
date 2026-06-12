@@ -1,6 +1,9 @@
-#export HF_HUB_CACHE=/mnt/d/models
-#export TORCH_HOME=/mnt/d/models
-#export CUDA_VISIBLE_DEVICES=
+# export HF_HUB_CACHE=/mnt/d/models
+# export TORCH_HOME=/mnt/d/models
+
+# For large models that do not fit in my GPU:
+# export CUDA_VISIBLE_DEVICES=
+# export XFORMERS_DISABLED=1
 
 import pytest
 
@@ -121,3 +124,16 @@ def test_image_features_full_radio_h():
 
 def test_image_features_full_radio_g():
     run_backbone_test("radio-g", 23, 31, 1536)
+
+# TIPSv2 models
+def test_image_features_full_tipsv2_b():
+    run_backbone_test("tipsv2-b", 26, 35, 768)
+
+def test_image_features_full_tipsv2_l():
+    run_backbone_test("tipsv2-l", 4, 4, 1024, input_size=(64, 64))
+
+def test_image_features_full_tipsv2_so400m():
+    run_backbone_test("tipsv2-so400m", 26, 35, 1152)
+
+def test_image_features_full_tipsv2_g():
+    run_backbone_test("tipsv2-g", 4, 4, 1536, input_size=(64, 64))

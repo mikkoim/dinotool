@@ -170,7 +170,32 @@ class FrameData:
             )
 
 
-class VideoDir:
+class ImageSequenceBase:
+    """Base class for loading images from a directory."""
+
+    def __init__(self, path: str, filenames: List[str], sort_key=None):
+        self.path = path
+        supported = get_PIL_extensions()
+        filenames = [
+            p for p in filenames
+            if os.path.splitext(p)[-1].lower() in supported
+        ]
+        if sort_key is not None:
+            filenames.sort(key=sort_key)
+        else:
+            filenames.sort()
+        self._filenames = filenames
+
+    def __len__(self):
+        return len(self._filenames)
+
+    def __getitem__(self, idx):
+        name = self._filenames[idx]
+        path = os.path.join(self.path, name)
+        return Image.open(path).convert("RGB")
+
+
+class VideoDir(ImageSequenceBase):
     """
     A class to load video frames from a directory.
     The frames are expected to be named in a way that allows them to be sorted
@@ -178,39 +203,30 @@ class VideoDir:
     """
 
     def __init__(self, path: str):
-        """
-        Args:
-            path (str): Directory containing video frames.
-        """
-        self.path = path
-        frame_names = [
-            p
-            for p in os.listdir(path)
-            if os.path.splitext(p)[-1].lower()
-            in get_PIL_extensions()
-        ]
-        frame_names.sort(key=lambda p: int(os.path.splitext(p)[0]))
-        self.frame_names = frame_names
-        self.frame_count = len(frame_names)
+        filenames = os.listdir(path)
+        # Validate that all image filenames (before extension) are numeric.
+        # This raises ValueError if not, allowing find_source() to fall back to ImageDirectory.
+        supported = get_PIL_extensions()
+        for p in filenames:
+            if os.path.splitext(p)[-1].lower() in supported:
+                int(os.path.splitext(p)[0])
+        super().__init__(path, filenames, sort_key=lambda p: int(os.path.splitext(p)[0]))
 
     @property
     def resolution(self):
         """Returns the resolution of the first frame."""
-        img = self[0]
-        return img.size
+        return self[0].size
+
+    @property
+    def frame_names(self):
+        return self._filenames
+
+    @property
+    def frame_count(self):
+        return len(self._filenames)
 
     def __repr__(self):
-        return f"VideoDir(path={self.path}, frame_count={len(self.frame_names)})"
-
-    def __len__(self):
-        """Returns the number of frames in the video."""
-        return len(self.frame_names)
-
-    def __getitem__(self, idx):
-        frame_name = self.frame_names[idx]
-        frame_path = os.path.join(self.path, frame_name)
-        img = Image.open(frame_path).convert("RGB")
-        return img
+        return f"VideoDir(path={self.path}, frame_count={len(self._filenames)})"
 
 
 class VideoFile:
@@ -226,6 +242,31 @@ class VideoFile:
         self.path = path
         self.video_capture = cv2.VideoCapture(path)
         self.frame_count = int(self.video_capture.get(cv2.CAP_PROP_FRAME_COUNT))
+        self._verify_frame_count()
+
+    def _verify_frame_count(self) -> None:
+        """Correct frame_count if cv2 overreported it.
+
+        CAP_PROP_FRAME_COUNT is unreliable for long or VFR videos. Verifies the
+        last reported frame is actually readable; if not, binary-searches backward
+        to find the true count. O(log N) seeks — at most ~14 for a 19500-frame video.
+        """
+        if self.frame_count == 0:
+            return
+        self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, self.frame_count - 1)
+        ret, _ = self.video_capture.read()
+        if ret:
+            return
+        lo, hi = 0, self.frame_count - 1
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            self.video_capture.set(cv2.CAP_PROP_POS_FRAMES, mid)
+            ret, _ = self.video_capture.read()
+            if ret:
+                lo = mid
+            else:
+                hi = mid - 1
+        self.frame_count = lo + 1
 
     @property
     def resolution(self):
@@ -293,40 +334,26 @@ class Video:
         return self.video[idx]
 
 
-class ImageDirectory:
+class ImageDirectory(ImageSequenceBase):
     """
     A class to load images from a directory.
     The images can be any format supported by PIL and of various sizes.
     """
 
     def __init__(self, path: str):
-        """
-        Args:
-            path (str): Directory containing images.
-        """
-        self.path = path
-        self.image_names = [
-            p
-            for p in os.listdir(path)
-            if os.path.splitext(p)[-1].lower()
-            in get_PIL_extensions()
-        ]
-        self.image_names.sort()  # Sort images by name
-        self.image_count = len(self.image_names)
-        self.filename_map = {name: idx for idx, name in enumerate(self.image_names)}
+        super().__init__(path, os.listdir(path))
+        self.filename_map = {name: idx for idx, name in enumerate(self._filenames)}
+
+    @property
+    def image_names(self):
+        return self._filenames
+
+    @property
+    def image_count(self):
+        return len(self._filenames)
 
     def __repr__(self):
-        return f"ImageDirectory(path={self.path}, image_count={self.image_count})"
-
-    def __len__(self):
-        """Returns the number of images in the directory."""
-        return self.image_count
-
-    def __getitem__(self, idx):
-        image_name = self.image_names[idx]
-        image_path = os.path.join(self.path, image_name)
-        img = Image.open(image_path).convert("RGB")
-        return img
+        return f"ImageDirectory(path={self.path}, image_count={len(self._filenames)})"
 
     def get_by_name(self, name: str) -> Image.Image:
         """
@@ -339,7 +366,7 @@ class ImageDirectory:
         if name not in self.filename_map:
             raise ValueError(f"Image {name} not found in directory {self.path}")
         idx = self.filename_map[name]
-        return self.__getitem__(idx)
+        return self[idx]
 
 
 def calculate_dino_dimensions(
@@ -374,7 +401,6 @@ class OpenCLIPTransform:
     resize_size: Optional[Tuple[int, int]] = None
     feature_map_size: Optional[Tuple[int, int]] = None
 
-
 @dataclass
 class DINOTransform:
     transform: nn.Module
@@ -383,6 +409,12 @@ class DINOTransform:
 
 @dataclass
 class RADIOTransform:
+    transform: nn.Module
+    resize_size: Optional[Tuple[int, int]] = None
+    feature_map_size: Optional[Tuple[int, int]] = None
+
+@dataclass
+class TIPSv2Transform:
     transform: nn.Module
     resize_size: Optional[Tuple[int, int]] = None
     feature_map_size: Optional[Tuple[int, int]] = None
@@ -437,7 +469,8 @@ class TransformFactory:
             self._RADIOmodel.to("cpu")
             self._RADIOmodel.eval()
             self._RADIOconditioner = self._RADIOmodel.make_preprocessor_external()
-
+        elif model_name.startswith("google/tipsv2"):
+            self.model_type = "tipsv2"
         else:
             self.model_type = "dino"
 
@@ -522,6 +555,27 @@ class TransformFactory:
         self._transform_cache[input_size] = self.transform
         return self.transform
 
+    def get_tipsv2_transform(self, input_size: Tuple[int, int]):
+        if input_size in self._transform_cache:
+            return self._transform_cache[input_size]
+
+        dims = calculate_dino_dimensions(input_size, patch_size=self.patch_size)
+        model_input_size = (dims["w"], dims["h"])
+        feature_map_size = (dims["w_featmap"], dims["h_featmap"])
+
+        transform = transforms.Compose([
+            transforms.Resize((model_input_size[1], model_input_size[0])),
+            transforms.ToTensor(),
+        ])
+
+        result = TIPSv2Transform(
+            transform=transform,
+            resize_size=model_input_size,
+            feature_map_size=feature_map_size,
+        )
+        self._transform_cache[input_size] = result
+        return result
+
     def get_transform(self, input_size: Tuple[int, int]) -> nn.Module:
         if self.model_type == "openclip":
             return self.get_openclip_transform()
@@ -529,6 +583,10 @@ class TransformFactory:
             return self.get_dino_transform(input_size)
         elif self.model_type == "radio":
             return self.get_radio_transform(input_size)
+        elif self.model_type == "tipsv2":
+            return self.get_tipsv2_transform(input_size)
+        else:
+            raise ValueError(f"Unknown model type: {self.model_type}")
 
 
 @dataclass

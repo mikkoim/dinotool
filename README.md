@@ -3,7 +3,7 @@
 
 # 🦕 DINOtool
 
-**DINOtool** is a command-line tool for extracting visual features using state-of-the-art foundation models like DINOv3, DINOv2, CLIP, SigLIP2 and AM-RADIO.
+**DINOtool** is a command-line tool for extracting visual features using state-of-the-art foundation models like DINOv3, DINOv2, CLIP, SigLIP2, TIPSv2, and AM-RADIO.
 It supports the extraction **global (frame-level)** and **local (patch-level)** features from images, videos and image directories, and can optionally visualize feature maps using PCA.
 
 ### Use from the command line
@@ -48,11 +48,12 @@ plt.imshow(model.pca(local_features)) # PCA visualization
 # Supported models
 
 - [DINOv2](https://github.com/facebookresearch/dinov2)
-- [DINOv3](https://github.com/facebookresearch/dinov3) (Gated model - requires logging in to Hugginface Hub and applying access at [each model page](https://huggingface.co/collections/facebook/dinov3-68924841bd6b561778e31009))
+- [DINOv3](https://github.com/facebookresearch/dinov3) (Gated model - requires logging in to Hugginface Hub and applying access at [each model page](https://huggingface.co/collections/facebook/dinov3))
 - [SigLIP](https://arxiv.org/abs/2303.15343)
 - [SigLIP 2](https://arxiv.org/abs/2502.14786)
 - [CLIP](https://github.com/openai/CLIP)
-- [AM-RADIO](https://github.com/NVlabs/RADIO)
+- [C-RADIO / AM-RADIO](https://github.com/NVlabs/RADIO)
+- [TIPSv2](https://huggingface.co/collections/google/tipsv2)
 
 List available models and their shortcuts with `dinotool --models`.
 # Examples:
@@ -121,6 +122,15 @@ You can check that dinotool is properly installed by testing it on an image:
 
 ```bash
 dinotool test.jpg -o out.jpg
+```
+
+### CUDA 12
+
+PyTorch now ships with CUDA 13 by default. If your system has CUDA 12, install a compatible `torch` version first (example, change version based on your system):
+
+```bash
+pip install torch==2.10.0 torchvision==0.25.0 --index-url https://download.pytorch.org/whl/cu126
+pip install dinotool
 ```
 
 ### `uv`
@@ -194,6 +204,7 @@ Use `--save-features` to export features for downstream tasks.
 | `full`   | `.nc` (image) / `.zarr` (video, batched image folders)| `(frames, height, width, feature)`|  Keeps spatial structure of patches.    |
 | `flat`   | partitioned `.parquet`         | `(frames * height * width, feature)`|  Reliable long video processing. Faster patch-level analysis  |
 | `frame`  | `.parquet`                     | `(frames, feature)`| One global feature vector per frame |
+| `all`    | `.parquet` (flat local) + `.parquet` / `.txt` (global) | both of the above (`flat` and `frame`) | Single-pass extraction of both local and global features |
 
 ### `full` - Spatial local features
 - Saves full patch feature maps from the ViT (one vector per image patch).
@@ -231,6 +242,28 @@ dinotool input.jpg -o output.jpg --save-features frame
 ```
 
 The output is a side-by-side visualization with PCA of the patch-level features.
+
+### `all` - Both local and global features in one pass
+- Combines `flat` and `frame`: saves flattened patch features **and** global CLS token features in a single model forward pass.
+- Useful when you need both patch-level and frame-level representations without running the model twice.
+- Output files per input type:
+
+| Input | Local (flat patches) | Global (frame) |
+|-------|----------------------|----------------|
+| Single image | `<output>.parquet` | `<output>.txt` |
+| Video / batched image folder | `<output>.parquet/` | `<output>_frame.parquet/` |
+| Image folder (variable sizes) | `<outdir>/<image>.parquet` per image | `<outdir>.parquet` (combined) |
+
+```bash
+# Single image — produces out.parquet (patches) and out.txt (global)
+dinotool input.jpg -o out --save-features all --no-vis
+
+# Video — produces out.parquet/ (patches) and out_frame.parquet/ (global)
+dinotool input.mp4 -o out.mp4 --save-features all --no-vis
+
+# Image folder — per-image parquets + combined global parquet
+dinotool images/ -o results --save-features all --no-vis
+```
 
 ## 🧪 Additional Options
 
@@ -285,6 +318,26 @@ There are some predefined shortcuts for popular models. These can be passed to `
 
 # CLIP
 "clip": "hf-hub:timm/vit_base_patch16_clip_224.openai"
+
+# DINOv3
+"dinov3-s": "facebook/dinov3-vits14-pretrain-lvd1689m"
+"dinov3-splus": "facebook/dinov3-vits14plus-pretrain-lvd1689m"
+"dinov3-b": "facebook/dinov3-vitb14-pretrain-lvd1689m"
+"dinov3-l": "facebook/dinov3-vitl16-pretrain-lvd1689m"
+"dinov3-hplus": "facebook/dinov3-vith16plus-pretrain-lvd1689m"
+"dinov3-l-sat": "facebook/dinov3-vitl16-pretrain-sat493m"
+
+# AM-RADIO
+"radio-b": "NVlabs/RADIO/c-radio_v3-b"
+"radio-l": "NVlabs/RADIO/c-radio_v3-l"
+"radio-h": "NVlabs/RADIO/c-radio_v3-h"
+"radio-g": "NVlabs/RADIO/c-radio_v3-g"
+
+# TIPSv2
+"tipsv2-b": "google/tipsv2-b14"
+"tipsv2-l": "google/tipsv2-l14"
+"tipsv2-so400m": "google/tipsv2-so400m14"
+"tipsv2-g": "google/tipsv2-g14"
 ```
 
 ## `--input-size`
@@ -304,6 +357,34 @@ dinotool input.mp4 -o output.mp4 --batch-size 16
 
 For batch processing image folders, `--input-size` must be set. Visualization is also not possible.
 
+## `--resume` / `-r`
+
+Resume a previously interrupted `--save-features` run on a video or image directory.
+
+If processing is interrupted (Ctrl-C, crash, etc.), DINOtool keeps the partial results in a temporary directory named `<output_stem>.dinotool_tmp/`. Re-running the same command with `--resume` skips already-processed batches and continues from where it stopped:
+
+```bash
+# Original command (interrupted mid-way)
+dinotool long_video.mp4 -o output.mp4 --save-features flat --batch-size 16
+
+# Resume after interruption — skips already-processed batches
+dinotool long_video.mp4 -o output.mp4 --save-features flat --batch-size 16 --resume
+```
+
+The temporary directory is deleted automatically once processing completes successfully. Running without `--resume` when a stale tmpdir exists discards it and starts fresh.
+
+## `--tmpdir DIR`
+
+Override the parent directory for the temporary working directory used during batched processing. By default the tmpdir is placed next to the output file.
+
+```bash
+dinotool long_video.mp4 -o output.mp4 --save-features flat --tmpdir /scratch/tmp
+
+# Also works with --resume. Pass the same --tmpdir both times
+dinotool long_video.mp4 -o output.mp4 --save-features flat --tmpdir /scratch/tmp --resume
+```
+
+The tmpdir is always named `<output_stem>.dinotool_tmp` inside the specified directory.
 
 ## 🧑‍💻 Usage reference
 
@@ -318,7 +399,7 @@ Arguments:
   -o, --output            Path for the output (required).
 
 Options:
-  -s, --save-features MODE    Save extracted features: full, flat, or frame
+  -s, --save-features MODE    Save extracted features: full, flat, frame, or all
   -m, --model-name MODEL      Model to use (default: dinov2_vits14_reg)
   --input-size W H        Resize input before processing. Must be set for batch
                           processing of image folders
@@ -326,6 +407,10 @@ Options:
   --only-pca              Only visualize PCA features.
   --no-vis                Only output features with no visualization.
                           --save features must be set.
+  -r, --resume            Resume a previously interrupted run (video/image-dir
+                          with --save-features). Skips already-processed batches.
+  --tmpdir DIR            Parent directory for the temporary working directory
+                          (default: same directory as output).
   -f, --force             Force overwrite output file if it exists.
   --models                List available models and their shortcuts.
   --version               Show the version of DINOtool.

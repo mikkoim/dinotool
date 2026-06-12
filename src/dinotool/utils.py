@@ -20,6 +20,10 @@ class BatchHandler:
 
     def __call__(self, batch):
         features = self.feature_extractor(batch["img"])
+        return self.process_features(features, batch)
+
+    def process_features(self, features: LocalFeatures, batch: dict) -> List[FrameData]:
+        """Build FrameData list from pre-extracted features, applying PCA if configured."""
         if self.pca is not None:
             pca_features = self.pca.transform(features.flat().tensor, flattened=False)
 

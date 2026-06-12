@@ -107,3 +107,16 @@ def test_image_features_frame_radio_h():
 
 def test_image_features_frame_radio_g():
     run_backbone_test("radio-g", 4608)
+
+# TIPSv2 models
+def test_image_features_frame_tipsv2_b():
+    run_backbone_test("tipsv2-b", 768)
+
+def test_image_features_frame_tipsv2_l():
+    run_backbone_test("tipsv2-l", 1024, input_size=(64, 64))
+
+def test_image_features_frame_tipsv2_so400m():
+    run_backbone_test("tipsv2-so400m", 1152)
+
+def test_image_features_frame_tipsv2_g():
+    run_backbone_test("tipsv2-g", 1536, input_size=(64, 64))
